@@ -37,15 +37,15 @@ const cleanWord = (word: string): string => {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "") // Remove accents
-    .replace(/[^a-z0-9]/g, "") // Remove non-alphanumeric
+    .replace(/[^a-z0-9]/g, "") // Remove non-alphanumeric strictly
     .trim();
 };
 
 // Dynamic Threshold based on word length to avoid false positives on short words
 const getMatchThreshold = (wordLength: number): number => {
-  if (wordLength <= 3) return 0.95; // Strict for 'o', 'a', 'de', etc.
-  if (wordLength <= 5) return 0.80; // Moderate
-  return 0.65; // Lenient for long words (kids stutter/slur)
+  if (wordLength <= 2) return 0.90; // Very strict for 'e', 'a', 'o', 'de'
+  if (wordLength <= 4) return 0.75; // Slightly lenient for small words
+  return 0.60; // Tolerant for longer words (kids stutter/slur/pluralize)
 };
 
 const calculateFluencyScore = (
@@ -133,7 +133,6 @@ export default function App() {
           if (!runningRef.current) return;
           
           const results = event.results;
-          // Get the latest transcript segment
           const lastResult = results[results.length - 1];
           const transcript = lastResult[0].transcript.toLowerCase();
           
@@ -145,17 +144,17 @@ export default function App() {
             
           if (spokenWords.length === 0) return;
 
-          // --- MASTER ADJUSTMENT: Anchored Search with Safety Check ---
+          // --- OPTIMIZED ALGORITHM FOR PACE & ACCURACY ---
           
-          // Look at a larger batch of spoken words to catch rapid reading (pace)
-          const BATCH_SIZE = 6; 
+          // Process a larger batch to handle fast speech
+          const BATCH_SIZE = 10; 
           const batch = spokenWords.slice(-BATCH_SIZE); 
           
           let currentIndex = indexRef.current;
           const allWords = wordsRef.current;
           
-          // How far ahead we search. Increased to 8 to handle fast pacing.
-          const LOOKAHEAD = 8; 
+          // Expanded Lookahead: 12 words to recover from skipped lines or fast reading
+          const LOOKAHEAD = 12; 
 
           let changesMade = false;
           let newWordsArray = [...allWords];
@@ -166,30 +165,33 @@ export default function App() {
 
             let bestMatch = { index: -1, score: 0, status: 'pending' as any };
 
-            // Search for this spoken word in the upcoming text window
+            // Search window
             for (let i = 0; i < LOOKAHEAD; i++) {
                const targetIdx = currentIndex + i;
                if (targetIdx >= allWords.length) break;
                
                const targetWordClean = allWords[targetIdx].clean;
+               
+               // Optimization: Exact match check first for performance
+               if (spoken === targetWordClean) {
+                 bestMatch = { index: targetIdx, score: 1.0, status: 'correct' };
+                 break; 
+               }
+
                const sim = getSimilarity(spoken, targetWordClean);
                const threshold = getMatchThreshold(targetWordClean.length);
                
                if (sim >= threshold) {
-                 // Found a potential match. 
-                 // If it's a better score or same score but closer, take it.
                  if (sim > bestMatch.score) {
-                   bestMatch = { index: targetIdx, score: sim, status: sim >= 0.9 ? 'correct' : 'near' };
+                   bestMatch = { index: targetIdx, score: sim, status: sim >= 0.85 ? 'correct' : 'near' };
                  }
-                 // If perfect match found immediately, break inner loop for efficiency
-                 if (sim === 1.0 && i === 0) break; 
                }
             }
 
             if (bestMatch.index !== -1) {
                // MATCH FOUND
                
-               // Case 1: It is the immediate next word (Ideal pace)
+               // Case 1: Immediate match (Next word)
                if (bestMatch.index === currentIndex) {
                   if (newWordsArray[currentIndex].status === 'pending') {
                     newWordsArray[currentIndex].status = bestMatch.status;
@@ -197,21 +199,21 @@ export default function App() {
                     changesMade = true;
                   }
                } 
-               // Case 2: The student skipped ahead (Fast pace or error)
+               // Case 2: Skipped ahead (Fast pace / Missing words)
                else {
-                  // SAFETY CHECK: Only skip if confidence is very high to prevent red-marking correct reading
-                  // Must be a near-perfect match OR a long unique word
+                  // Only confirm a skip if confidence is high
+                  // Short words need 1.0 match to trigger a skip to prevent false positives
                   const targetLen = allWords[bestMatch.index].clean.length;
-                  const isSafeToSkip = bestMatch.score >= 0.95 || (targetLen >= 5 && bestMatch.score >= 0.85);
+                  const isReliableSkip = bestMatch.score === 1.0 || (targetLen > 3 && bestMatch.score >= 0.80);
                   
-                  if (isSafeToSkip) {
-                     // Mark intermediate words as skipped
+                  if (isReliableSkip) {
+                     // Mark intermediate as skipped
                      for (let k = currentIndex; k < bestMatch.index; k++) {
                         if (newWordsArray[k].status === 'pending') {
                            newWordsArray[k].status = 'skipped';
                         }
                      }
-                     // Mark the found word
+                     // Mark found word
                      if (newWordsArray[bestMatch.index].status === 'pending') {
                         newWordsArray[bestMatch.index].status = bestMatch.status;
                      }
@@ -233,7 +235,7 @@ export default function App() {
              try { 
                recognition.start(); 
              } catch (e) {
-               // console.log("Reconnection attempt failed", e);
+               // Silent catch for production
              }
           }
         };
@@ -274,7 +276,8 @@ export default function App() {
   const startReading = (text: string) => {
     stopTTS();
     setCurrentTextOriginal(text);
-    const words: WordObject[] = text.split(' ').map(w => ({
+    // Basic pre-clean to avoid punctuation issues in display/matching split
+    const words: WordObject[] = text.trim().split(/\s+/).map(w => ({
       original: w,
       clean: cleanWord(w),
       status: 'pending'
@@ -299,7 +302,6 @@ export default function App() {
         recognitionRef.current.start(); 
       } catch (e) {
         console.error("Mic error:", e);
-        // Fallback if already started
       }
     }
   };
@@ -336,6 +338,7 @@ export default function App() {
     const validWords = correctWords + nearWords;
     const processedWords = wordsArray.filter(w => w.status !== 'pending').length;
     
+    // Calculation based on TOTAL PROCESSED WORDS (Speed) and ACCURACY separately
     const { nota, classificacao, ppm } = calculateFluencyScore(
       processedWords > 0 ? processedWords : validWords, 
       validWords, 
@@ -371,7 +374,7 @@ export default function App() {
   // --- Views ---
 
   const renderGatekeeper = () => (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 animate-fade-in">
       <Card className="p-8 w-full max-w-sm text-center space-y-6 shadow-xl">
         <div className="flex justify-center mb-4">
           <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center">
@@ -428,7 +431,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Leveling CTA - Simplified */}
+      {/* Leveling CTA */}
       <Card onClick={() => { setSelectedCategory('Nivelamento'); startReading(LIBRARY['Nivelamento'].texts['medio'][0]); }} 
         className="p-4 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white cursor-pointer hover:shadow-lg transition-all active:scale-95 relative overflow-hidden">
         <div className="absolute right-0 top-0 opacity-10 transform translate-x-2 -translate-y-2">
@@ -466,7 +469,7 @@ export default function App() {
     if (!resultData) return null;
     const isSimulado = selectedCategory === "Simulado";
     
-    // Only count Processed words for calculating percentages shown in the ring
+    // Percentages
     const totalProcessed = wordsArray.filter(w => w.status !== 'pending').length || 1;
     const correctCount = wordsArray.filter(w => w.status === 'correct').length;
     const correctPct = Math.round((correctCount / totalProcessed) * 100);
@@ -533,15 +536,17 @@ export default function App() {
 
         <div className="text-left space-y-2">
           <h3 className="text-sm font-bold text-slate-500 uppercase flex items-center gap-2"><Eye className="w-4 h-4" /> Mapa de Calor</h3>
-          <Card className="p-3 bg-slate-50 border-slate-200 max-h-60 overflow-y-auto">
-            <p className="leading-relaxed text-base text-slate-400">
+          <Card className="p-4 bg-slate-50 border-slate-200 max-h-80 overflow-y-auto">
+            <p className="leading-loose text-lg font-medium text-slate-400">
               {wordsArray.map((w, i) => {
                 let colorClass = "";
-                if (w.status === 'correct') colorClass = "bg-emerald-100 text-emerald-800 border-emerald-200";
-                else if (w.status === 'near') colorClass = "bg-yellow-100 text-yellow-800 border-yellow-200";
-                else if (w.status === 'skipped') colorClass = "bg-red-50 text-red-900 border-red-100 opacity-60";
-                else return <span key={i} className="opacity-40 mr-1">{w.original}</span>;
-                return <span key={i} className={`mr-1 px-1 py-0.5 rounded border ${colorClass} inline-block mb-1 text-sm`}>{w.original}</span>
+                // Heatmap background logic
+                if (w.status === 'correct') colorClass = "bg-emerald-200 text-emerald-900 border-b-2 border-emerald-300";
+                else if (w.status === 'near') colorClass = "bg-yellow-200 text-yellow-900 border-b-2 border-yellow-300";
+                else if (w.status === 'skipped') colorClass = "bg-red-100 text-red-900 border-b-2 border-red-200 opacity-70 line-through decoration-red-400";
+                else return <span key={i} className="opacity-40 mr-1.5">{w.original}</span>;
+                
+                return <span key={i} className={`mr-1.5 px-1 rounded ${colorClass} inline-block`}>{w.original}</span>
               })}
             </p>
           </Card>
@@ -602,7 +607,7 @@ export default function App() {
           <div className="w-10 flex justify-center">{isListening ? <Mic className="w-6 h-6 text-red-500 animate-pulse" /> : <MicOff className="w-6 h-6 text-slate-300" />}</div>
         </div>
 
-        <Card className="flex-1 p-6 md:p-8 mb-6 overflow-y-auto relative border-2 border-indigo-50">
+        <Card className="flex-1 p-6 md:p-8 mb-6 overflow-y-auto relative border-2 border-indigo-50 scroll-smooth">
           {!isTimerRunning && timeElapsed === 0 && (
             <div className="absolute inset-0 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center z-10 text-center p-6">
               <h3 className="text-xl font-bold text-slate-800 mb-2">Vamos ler?</h3>
@@ -612,14 +617,27 @@ export default function App() {
               </div>
             </div>
           )}
-          <div className={`text-xl md:text-2xl leading-loose font-medium transition-all duration-500 ${!isTimerRunning && timeElapsed === 0 ? 'blur-sm opacity-50' : 'opacity-100'}`}>
+          <div className={`text-xl md:text-3xl leading-loose font-medium transition-all duration-500 ${!isTimerRunning && timeElapsed === 0 ? 'blur-sm opacity-50' : 'opacity-100'}`}>
             {wordsArray.map((item, index) => {
-              let statusClass = "mr-1.5 mb-2 px-1.5 py-0.5 rounded-md inline-block text-slate-400";
-              if (index === currentWordIndex) statusClass += " bg-indigo-600 text-white font-bold shadow-sm";
-              else if (item.status === 'correct') statusClass += " bg-emerald-200 text-emerald-900";
-              else if (item.status === 'near') statusClass += " bg-yellow-200 text-yellow-900";
-              else if (item.status === 'skipped') statusClass += " bg-red-50 text-red-900 opacity-60";
-              else if (item.status === 'pending') statusClass = "mr-1.5 mb-2 px-1.5 py-0.5 rounded-md inline-block text-slate-800";
+              // Reading Mode UI - Background highlights for clarity
+              let statusClass = "mr-2 mb-3 px-2 py-1 rounded-lg inline-block text-slate-400 transition-colors duration-300";
+              
+              if (index === currentWordIndex) {
+                statusClass = "mr-2 mb-3 px-2 py-1 rounded-lg inline-block bg-indigo-600 text-white font-bold transform scale-105 shadow-md";
+              }
+              else if (item.status === 'correct') {
+                statusClass = "mr-2 mb-3 px-2 py-1 rounded-lg inline-block bg-emerald-200 text-emerald-900";
+              }
+              else if (item.status === 'near') {
+                statusClass = "mr-2 mb-3 px-2 py-1 rounded-lg inline-block bg-yellow-200 text-yellow-900";
+              }
+              else if (item.status === 'skipped') {
+                statusClass = "mr-2 mb-3 px-2 py-1 rounded-lg inline-block bg-red-100 text-red-900 opacity-50";
+              }
+              else if (item.status === 'pending') {
+                statusClass = "mr-2 mb-3 px-2 py-1 rounded-lg inline-block text-slate-800";
+              }
+
               return <span key={index} className={statusClass}>{item.original}</span>;
             })}
           </div>
