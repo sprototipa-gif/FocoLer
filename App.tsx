@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BookOpen, Mic, Play, RotateCcw, Award, BarChart2, CheckCircle, Wand2, MicOff, AlertCircle, ArrowLeft, Download, Clock, PieChart, Activity, Eye, Edit, UserCog, Volume2, StopCircle, UserPlus, Users, Trash2, ChevronRight, X } from 'lucide-react';
+import { BookOpen, Mic, Play, RotateCcw, Award, BarChart2, CheckCircle, Wand2, MicOff, AlertCircle, ArrowLeft, Download, Clock, PieChart, Activity, Eye, Edit, UserCog, Volume2, StopCircle, UserPlus, Users, Trash2, ChevronRight, X, LogIn } from 'lucide-react';
 import { Button, Card } from './components/UI';
 import { LIBRARY, LEVELS } from './constants';
 import { DifficultyLevel, IWindow, ReadingResult, WordObject, ReadingLog, Student, HeatmapItem } from './types';
@@ -60,8 +60,8 @@ const calculateFluencyScore = (
 };
 
 export default function App() {
-  // Views
-  const [view, setView] = useState<'student_select' | 'teacher_dashboard' | 'home' | 'text_selection' | 'reading' | 'results' | 'generating' | 'custom_text' | 'report_detail'>('student_select');
+  // Views - Defaulting to 'home' to restore immediate access
+  const [view, setView] = useState<'student_select' | 'teacher_dashboard' | 'home' | 'text_selection' | 'reading' | 'results' | 'generating' | 'custom_text' | 'report_detail'>('home');
   
   // Data & State
   const [students, setStudents] = useState<Student[]>([]);
@@ -303,6 +303,7 @@ export default function App() {
 
     setResultData(result);
 
+    // Only save if there's a logged-in student
     if (currentStudent) {
       storageService.saveReading({
         studentId: currentStudent.id,
@@ -337,9 +338,13 @@ export default function App() {
 
   const renderStudentSelect = () => (
     <div className="flex flex-col items-center justify-center min-h-full p-4 animate-fade-in">
+      <div className="flex items-center w-full mb-4">
+         <button onClick={() => setView('home')} className="p-2 -ml-2 hover:bg-slate-100 rounded-full text-slate-500"><ArrowLeft className="w-6 h-6" /></button>
+      </div>
+      
       <div className="text-center mb-8">
-        <h1 className="text-4xl font-extrabold text-indigo-600 tracking-tighter mb-2">FocoLer</h1>
-        <p className="text-slate-500">Selecione seu perfil para começar</p>
+        <h1 className="text-3xl font-extrabold text-indigo-600 tracking-tighter mb-2">Quem é você?</h1>
+        <p className="text-slate-500">Selecione seu perfil</p>
       </div>
 
       <div className="w-full max-w-md grid gap-3 mb-8 max-h-[50vh] overflow-y-auto pr-2">
@@ -379,7 +384,7 @@ export default function App() {
     <div className="flex flex-col h-full pt-4 animate-fade-in w-full">
       <div className="flex items-center justify-between mb-6 sticky top-0 bg-white z-10 py-2 border-b border-slate-100">
         <div className="flex items-center gap-3">
-          <button onClick={() => setView('student_select')} className="p-2 hover:bg-slate-100 rounded-full text-slate-500">
+          <button onClick={() => setView('home')} className="p-2 hover:bg-slate-100 rounded-full text-slate-500">
             <ArrowLeft className="w-6 h-6" />
           </button>
           <h2 className="font-bold text-xl text-slate-800">Gestão de Turma</h2>
@@ -403,36 +408,42 @@ export default function App() {
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-3 pb-8">
-        {students.map(student => {
-          const stats = storageService.getStudentStats(student.id);
-          return (
-            <Card key={student.id} onClick={() => {
-              setSelectedReportStudent(student);
-              setView('report_detail');
-            }} className="p-4 cursor-pointer hover:border-indigo-300 transition-all">
-              <div className="flex justify-between items-start">
-                <div className="flex gap-3">
-                  <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center font-bold text-xl text-slate-500">
-                    {student.name.charAt(0)}
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-800 text-lg">{student.name}</h3>
-                    <div className="flex gap-2 text-xs mt-1">
-                      <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded capitalize">{student.level}</span>
-                      {stats && <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded">{stats.avgPPM} PPM (Méd)</span>}
+        {students.length === 0 ? (
+            <div className="text-center text-slate-400 mt-10 p-6 bg-slate-50 rounded-xl">
+                Adicione seus alunos para acompanhar o progresso.
+            </div>
+        ) : (
+            students.map(student => {
+            const stats = storageService.getStudentStats(student.id);
+            return (
+                <Card key={student.id} onClick={() => {
+                setSelectedReportStudent(student);
+                setView('report_detail');
+                }} className="p-4 cursor-pointer hover:border-indigo-300 transition-all">
+                <div className="flex justify-between items-start">
+                    <div className="flex gap-3">
+                    <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center font-bold text-xl text-slate-500">
+                        {student.name.charAt(0)}
                     </div>
-                  </div>
+                    <div>
+                        <h3 className="font-bold text-slate-800 text-lg">{student.name}</h3>
+                        <div className="flex gap-2 text-xs mt-1">
+                        <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded capitalize">{student.level}</span>
+                        {stats && <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded">{stats.avgPPM} PPM (Méd)</span>}
+                        </div>
+                    </div>
+                    </div>
+                    <button 
+                    onClick={(e) => { e.stopPropagation(); handleDeleteStudent(student.id); }}
+                    className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
+                    >
+                    <Trash2 className="w-5 h-5" />
+                    </button>
                 </div>
-                <button 
-                  onClick={(e) => { e.stopPropagation(); handleDeleteStudent(student.id); }}
-                  className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              </div>
-            </Card>
-          );
-        })}
+                </Card>
+            );
+            })
+        )}
       </div>
     </div>
   );
@@ -515,27 +526,45 @@ export default function App() {
     <div className="space-y-6 animate-fade-in w-full pt-4">
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold">
-            {currentStudent?.name.charAt(0)}
-          </div>
-          <div>
-            <h2 className="font-bold text-slate-800 leading-tight">Olá, {currentStudent?.name}</h2>
-            <p className="text-xs text-slate-500">Nível: <span className="capitalize">{currentStudent?.level}</span></p>
-          </div>
+          {currentStudent ? (
+            <>
+              <div className="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold shadow-lg shadow-indigo-200">
+                {currentStudent.name.charAt(0)}
+              </div>
+              <div>
+                <h2 className="font-bold text-slate-800 leading-tight">Olá, {currentStudent.name}</h2>
+                <p className="text-xs text-slate-500">Nível: <span className="capitalize">{currentStudent.level}</span></p>
+              </div>
+            </>
+          ) : (
+            <div>
+              <h1 className="font-extrabold text-2xl text-indigo-600 tracking-tight">FocoLer</h1>
+              <p className="text-xs text-slate-400 font-medium">Treinador de Fluência</p>
+            </div>
+          )}
         </div>
-        <button onClick={() => { setCurrentStudent(null); setView('student_select'); }} className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg">
-          Sair
-        </button>
+        {currentStudent ? (
+          <button onClick={() => { setCurrentStudent(null); setView('student_select'); }} className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors">
+            Trocar
+          </button>
+        ) : (
+          <button onClick={() => setView('student_select')} className="text-xs font-bold text-white bg-indigo-600 px-3 py-2 rounded-lg flex items-center gap-2 shadow-indigo-200 shadow-md hover:bg-indigo-700 transition-all">
+            <LogIn className="w-3 h-3" /> Entrar
+          </button>
+        )}
       </div>
 
-      {/* Leveling CTA */}
+      {/* Leveling CTA - Only show if student is logged in or hide/show generic */}
       <Card onClick={() => { setSelectedCategory('Nivelamento'); setSelectedLevel('medio'); startReading(LIBRARY['Nivelamento'].texts['medio'][0]); }} 
-        className="p-4 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white cursor-pointer hover:shadow-lg transition-all active:scale-95">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-white/20 rounded-full"><Award className="w-6 h-6 text-white" /></div>
+        className="p-4 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white cursor-pointer hover:shadow-lg transition-all active:scale-95 relative overflow-hidden">
+        <div className="absolute right-0 top-0 opacity-10 transform translate-x-2 -translate-y-2">
+            <Award className="w-24 h-24" />
+        </div>
+        <div className="flex items-center gap-4 relative z-10">
+          <div className="p-3 bg-white/20 rounded-full backdrop-blur-sm"><Award className="w-6 h-6 text-white" /></div>
           <div>
             <h3 className="font-bold text-lg">Teste de Nivelamento</h3>
-            <p className="text-xs text-white/80">Descubra seu nível ideal de leitura</p>
+            <p className="text-xs text-white/90">Descubra seu nível ideal de leitura</p>
           </div>
         </div>
       </Card>
@@ -553,7 +582,7 @@ export default function App() {
         ))}
       </div>
 
-      <Button variant="secondary" className="w-full py-3" onClick={() => { setCustomTextInput(''); setView('custom_text'); }}>
+      <Button variant="secondary" className="w-full py-3 text-sm" onClick={() => { setCustomTextInput(''); setView('custom_text'); }}>
         <Edit className="w-4 h-4" /> Colar Texto (Professor)
       </Button>
     </div>
