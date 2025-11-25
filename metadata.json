@@ -1,0 +1,7 @@
+{
+  "name": "FocoLer",
+  "description": "Foco na leitura fluente. An AI-powered reading fluency trainer for children that generates personalized stories and tracks reading speed (PPM) using voice recognition.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
