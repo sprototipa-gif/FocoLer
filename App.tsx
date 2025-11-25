@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BookOpen, Mic, Play, RotateCcw, Award, BarChart2, CheckCircle, Wand2, MicOff, AlertCircle, ArrowLeft, Download, Clock, PieChart, Activity, Eye, Edit, Volume2, StopCircle, ChevronRight, X } from 'lucide-react';
+import { BookOpen, Mic, Play, RotateCcw, Award, BarChart2, CheckCircle, Wand2, MicOff, AlertCircle, ArrowLeft, Download, Clock, PieChart, Activity, Eye, Edit, Volume2, StopCircle, ChevronRight, X, Lock, Key } from 'lucide-react';
 import { Button, Card } from './components/UI';
-import { LIBRARY, LEVELS } from './constants';
+import { LIBRARY, LEVELS, ACCESS_CODE } from './constants';
 import { DifficultyLevel, IWindow, ReadingResult, WordObject, HeatmapItem } from './types';
 import { generateStory } from './services/geminiService';
 
@@ -31,8 +31,14 @@ const getSimilarity = (s1: string, s2: string): number => {
   return (longer.length - getLevenshteinDistance(s1, s2)) / longer.length;
 };
 
+// Enhanced cleaning: Removes accents (NFD), punctuation, and lowercases.
 const cleanWord = (word: string): string => {
-  return word.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, "").trim();
+  return word
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, "")
+    .trim();
 };
 
 const calculateFluencyScore = (
@@ -62,6 +68,11 @@ export default function App() {
   // Views
   const [view, setView] = useState<'home' | 'text_selection' | 'reading' | 'results' | 'generating' | 'custom_text'>('home');
   
+  // Access Control
+  const [isLocked, setIsLocked] = useState(true);
+  const [accessInput, setAccessInput] = useState('');
+  const [accessError, setAccessError] = useState(false);
+
   // Reading Config
   const [selectedLevel, setSelectedLevel] = useState<DifficultyLevel>('medio');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -85,6 +96,14 @@ export default function App() {
   const wordsRef = useRef<WordObject[]>([]);
   const indexRef = useRef(0);
   const runningRef = useRef(false);
+
+  // Check Access on Mount
+  useEffect(() => {
+    const savedAccess = localStorage.getItem('focoler_access');
+    if (savedAccess === ACCESS_CODE) {
+      setIsLocked(false);
+    }
+  }, []);
 
   // Sync Refs
   useEffect(() => { wordsRef.current = wordsArray; }, [wordsArray]);
@@ -112,7 +131,7 @@ export default function App() {
           if (spokenWords.length === 0) return;
 
           // Sliding Window Logic
-          const batch = spokenWords.slice(-3); // Look at last 3 words
+          const batch = spokenWords.slice(-3); // Look at last 3 words spoken
           const currentIndex = indexRef.current;
           const currentWords = wordsRef.current;
           
@@ -124,9 +143,10 @@ export default function App() {
             const targetIdx = currentIndex + i;
             if (targetIdx >= currentWords.length) break;
             
-            // Check against our batch
+            // Check each spoken word against the target word
             for (const spoken of batch) {
               const sim = getSimilarity(spoken, currentWords[targetIdx].clean);
+              // Keep the best match found in this window
               if (sim > highestSim) {
                 highestSim = sim;
                 bestMatchIndex = targetIdx;
@@ -134,17 +154,22 @@ export default function App() {
             }
           }
 
-          if (highestSim >= 0.60) {
-            const status = highestSim >= 0.9 ? 'correct' : 'near';
+          // Adjusted thresholds for better accuracy
+          // 0.85 allows for minor pronunciation diffs while keeping integrity
+          // 0.55 allows for 'near' matches to be detected
+          if (highestSim >= 0.55) {
+            const status = highestSim >= 0.85 ? 'correct' : 'near';
             
             setWordsArray(prev => {
               const newArr = [...prev];
-              // Mark jumped words
+              // Mark skipped words
               for (let k = currentIndex; k < bestMatchIndex; k++) {
                 if (newArr[k].status === 'pending') newArr[k].status = 'skipped';
               }
               // Mark match
-              newArr[bestMatchIndex].status = status;
+              if (newArr[bestMatchIndex].status === 'pending') {
+                 newArr[bestMatchIndex].status = status;
+              }
               return newArr;
             });
             setCurrentWordIndex(bestMatchIndex + 1);
@@ -152,7 +177,14 @@ export default function App() {
         };
 
         recognition.onend = () => {
-          if (runningRef.current) try { recognition.start(); } catch (e) {}
+          // Robust reconnection
+          if (runningRef.current) {
+             try { 
+               recognition.start(); 
+             } catch (e) {
+               // console.log("Reconnection attempt failed", e);
+             }
+          }
         };
         recognitionRef.current = recognition;
       }
@@ -178,6 +210,16 @@ export default function App() {
 
   // --- Actions ---
 
+  const unlockApp = () => {
+    if (accessInput === ACCESS_CODE) {
+      localStorage.setItem('focoler_access', ACCESS_CODE);
+      setIsLocked(false);
+      setAccessError(false);
+    } else {
+      setAccessError(true);
+    }
+  };
+
   const startReading = (text: string) => {
     stopTTS();
     setCurrentTextOriginal(text);
@@ -201,7 +243,14 @@ export default function App() {
     setIsTimerRunning(true);
     setIsListening(true);
     runningRef.current = true;
-    if (recognitionRef.current) try { recognitionRef.current.start(); } catch (e) {}
+    if (recognitionRef.current) {
+      try { 
+        recognitionRef.current.start(); 
+      } catch (e) {
+        console.error("Mic error:", e);
+        // Fallback if already started
+      }
+    }
   };
 
   const stopListening = () => {
@@ -269,6 +318,38 @@ export default function App() {
   };
 
   // --- Views ---
+
+  const renderGatekeeper = () => (
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
+      <Card className="p-8 w-full max-w-sm text-center space-y-6 shadow-xl">
+        <div className="flex justify-center mb-4">
+          <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center">
+            <Lock className="w-8 h-8 text-indigo-600" />
+          </div>
+        </div>
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-800 mb-2">Acesso Restrito</h1>
+          <p className="text-slate-500 text-sm">Digite seu código de acesso para continuar.</p>
+        </div>
+        <div className="space-y-4">
+          <div className="relative">
+            <Key className="w-5 h-5 text-slate-400 absolute left-3 top-3.5" />
+            <input 
+              type="text" 
+              value={accessInput}
+              onChange={(e) => { setAccessInput(e.target.value); setAccessError(false); }}
+              onKeyDown={(e) => e.key === 'Enter' && unlockApp()}
+              className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl outline-none transition-colors ${accessError ? 'border-red-300 bg-red-50 text-red-900' : 'border-slate-200 focus:border-indigo-500'}`}
+              placeholder="Código de acesso"
+            />
+          </div>
+          {accessError && <p className="text-red-500 text-xs font-bold">Código inválido. Tente novamente.</p>}
+          <Button onClick={unlockApp} className="w-full py-3 text-lg">Entrar</Button>
+        </div>
+      </Card>
+      <p className="mt-8 text-slate-400 text-xs font-medium">FocoLer © 2025</p>
+    </div>
+  );
 
   const renderHome = () => (
     <div className="space-y-6 animate-fade-in w-full pt-4">
@@ -496,6 +577,10 @@ export default function App() {
       </div>
     );
   };
+
+  if (isLocked) {
+    return renderGatekeeper();
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-indigo-100">

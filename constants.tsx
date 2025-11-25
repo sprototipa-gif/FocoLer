@@ -2,6 +2,8 @@ import React from 'react';
 import { Cat, Rocket, Sparkles, Trophy, Monitor, FileText, BarChart } from 'lucide-react';
 import { LibraryData, ReadingProfile } from './types';
 
+export const ACCESS_CODE = "focoler2025";
+
 export const LIBRARY: LibraryData = {
   "Nivelamento": {
     icon: <BarChart className="w-6 h-6" />,
