@@ -36,9 +36,16 @@ const cleanWord = (word: string): string => {
   return word
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, "")
+    .replace(/[\u0300-\u036f]/g, "") // Remove accents
+    .replace(/[^a-z0-9]/g, "") // Remove non-alphanumeric
     .trim();
+};
+
+// Dynamic Threshold based on word length to avoid false positives on short words
+const getMatchThreshold = (wordLength: number): number => {
+  if (wordLength <= 3) return 0.95; // Strict for 'o', 'a', 'de', etc.
+  if (wordLength <= 5) return 0.80; // Moderate
+  return 0.65; // Lenient for long words (kids stutter/slur)
 };
 
 const calculateFluencyScore = (
@@ -124,60 +131,104 @@ export default function App() {
 
         recognition.onresult = (event: any) => {
           if (!runningRef.current) return;
+          
           const results = event.results;
+          // Get the latest transcript segment
           const lastResult = results[results.length - 1];
-          const transcript = lastResult[0].transcript.toLowerCase().trim();
-          const spokenWords = transcript.split(' ').map((w: string) => cleanWord(w)).filter((w: string) => w.length > 0);
+          const transcript = lastResult[0].transcript.toLowerCase();
+          
+          // Clean and split spoken words
+          const spokenWordsRaw = transcript.split(/\s+/);
+          const spokenWords = spokenWordsRaw
+            .map((w: string) => cleanWord(w))
+            .filter((w: string) => w.length > 0);
+            
           if (spokenWords.length === 0) return;
 
-          // Sliding Window Logic
-          const batch = spokenWords.slice(-3); // Look at last 3 words spoken
-          const currentIndex = indexRef.current;
-          const currentWords = wordsRef.current;
+          // --- MASTER ADJUSTMENT: Anchored Search with Safety Check ---
           
-          let bestMatchIndex = -1;
-          let highestSim = 0;
+          // Look at a larger batch of spoken words to catch rapid reading (pace)
+          const BATCH_SIZE = 6; 
+          const batch = spokenWords.slice(-BATCH_SIZE); 
+          
+          let currentIndex = indexRef.current;
+          const allWords = wordsRef.current;
+          
+          // How far ahead we search. Increased to 8 to handle fast pacing.
+          const LOOKAHEAD = 8; 
 
-          // Expanded window: Check up to 8 words ahead
-          for (let i = 0; i < 8; i++) {
-            const targetIdx = currentIndex + i;
-            if (targetIdx >= currentWords.length) break;
-            
-            // Check each spoken word against the target word
-            for (const spoken of batch) {
-              const sim = getSimilarity(spoken, currentWords[targetIdx].clean);
-              // Keep the best match found in this window
-              if (sim > highestSim) {
-                highestSim = sim;
-                bestMatchIndex = targetIdx;
-              }
+          let changesMade = false;
+          let newWordsArray = [...allWords];
+
+          // Iterate through recent spoken words
+          for (const spoken of batch) {
+            if (currentIndex >= allWords.length) break;
+
+            let bestMatch = { index: -1, score: 0, status: 'pending' as any };
+
+            // Search for this spoken word in the upcoming text window
+            for (let i = 0; i < LOOKAHEAD; i++) {
+               const targetIdx = currentIndex + i;
+               if (targetIdx >= allWords.length) break;
+               
+               const targetWordClean = allWords[targetIdx].clean;
+               const sim = getSimilarity(spoken, targetWordClean);
+               const threshold = getMatchThreshold(targetWordClean.length);
+               
+               if (sim >= threshold) {
+                 // Found a potential match. 
+                 // If it's a better score or same score but closer, take it.
+                 if (sim > bestMatch.score) {
+                   bestMatch = { index: targetIdx, score: sim, status: sim >= 0.9 ? 'correct' : 'near' };
+                 }
+                 // If perfect match found immediately, break inner loop for efficiency
+                 if (sim === 1.0 && i === 0) break; 
+               }
+            }
+
+            if (bestMatch.index !== -1) {
+               // MATCH FOUND
+               
+               // Case 1: It is the immediate next word (Ideal pace)
+               if (bestMatch.index === currentIndex) {
+                  if (newWordsArray[currentIndex].status === 'pending') {
+                    newWordsArray[currentIndex].status = bestMatch.status;
+                    currentIndex++;
+                    changesMade = true;
+                  }
+               } 
+               // Case 2: The student skipped ahead (Fast pace or error)
+               else {
+                  // SAFETY CHECK: Only skip if confidence is very high to prevent red-marking correct reading
+                  // Must be a near-perfect match OR a long unique word
+                  const targetLen = allWords[bestMatch.index].clean.length;
+                  const isSafeToSkip = bestMatch.score >= 0.95 || (targetLen >= 5 && bestMatch.score >= 0.85);
+                  
+                  if (isSafeToSkip) {
+                     // Mark intermediate words as skipped
+                     for (let k = currentIndex; k < bestMatch.index; k++) {
+                        if (newWordsArray[k].status === 'pending') {
+                           newWordsArray[k].status = 'skipped';
+                        }
+                     }
+                     // Mark the found word
+                     if (newWordsArray[bestMatch.index].status === 'pending') {
+                        newWordsArray[bestMatch.index].status = bestMatch.status;
+                     }
+                     currentIndex = bestMatch.index + 1;
+                     changesMade = true;
+                  }
+               }
             }
           }
 
-          // Adjusted thresholds for better accuracy
-          // 0.85 allows for minor pronunciation diffs while keeping integrity
-          // 0.55 allows for 'near' matches to be detected
-          if (highestSim >= 0.55) {
-            const status = highestSim >= 0.85 ? 'correct' : 'near';
-            
-            setWordsArray(prev => {
-              const newArr = [...prev];
-              // Mark skipped words
-              for (let k = currentIndex; k < bestMatchIndex; k++) {
-                if (newArr[k].status === 'pending') newArr[k].status = 'skipped';
-              }
-              // Mark match
-              if (newArr[bestMatchIndex].status === 'pending') {
-                 newArr[bestMatchIndex].status = status;
-              }
-              return newArr;
-            });
-            setCurrentWordIndex(bestMatchIndex + 1);
+          if (changesMade) {
+             setWordsArray(newWordsArray);
+             setCurrentWordIndex(currentIndex);
           }
         };
 
         recognition.onend = () => {
-          // Robust reconnection
           if (runningRef.current) {
              try { 
                recognition.start(); 
@@ -488,7 +539,7 @@ export default function App() {
                 let colorClass = "";
                 if (w.status === 'correct') colorClass = "bg-emerald-100 text-emerald-800 border-emerald-200";
                 else if (w.status === 'near') colorClass = "bg-yellow-100 text-yellow-800 border-yellow-200";
-                else if (w.status === 'skipped') colorClass = "bg-red-100 text-red-800 border-red-200 decoration-red-400";
+                else if (w.status === 'skipped') colorClass = "bg-red-50 text-red-900 border-red-100 opacity-60";
                 else return <span key={i} className="opacity-40 mr-1">{w.original}</span>;
                 return <span key={i} className={`mr-1 px-1 py-0.5 rounded border ${colorClass} inline-block mb-1 text-sm`}>{w.original}</span>
               })}
@@ -567,7 +618,7 @@ export default function App() {
               if (index === currentWordIndex) statusClass += " bg-indigo-600 text-white font-bold shadow-sm";
               else if (item.status === 'correct') statusClass += " bg-emerald-200 text-emerald-900";
               else if (item.status === 'near') statusClass += " bg-yellow-200 text-yellow-900";
-              else if (item.status === 'skipped') statusClass += " bg-red-100 text-red-900 opacity-60";
+              else if (item.status === 'skipped') statusClass += " bg-red-50 text-red-900 opacity-60";
               else if (item.status === 'pending') statusClass = "mr-1.5 mb-2 px-1.5 py-0.5 rounded-md inline-block text-slate-800";
               return <span key={index} className={statusClass}>{item.original}</span>;
             })}
