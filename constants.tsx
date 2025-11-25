@@ -18,7 +18,7 @@ export const LIBRARY: LibraryData = {
       ]
     }
   },
-  "Avaliação CAEd 2025": {
+  "Simulado": {
     icon: <FileText className="w-6 h-6" />,
     color: "bg-teal-100 text-teal-700",
     texts: {
