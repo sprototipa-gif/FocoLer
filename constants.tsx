@@ -1,8 +1,23 @@
 import React from 'react';
-import { Cat, Rocket, Sparkles, Trophy, Monitor, FileText } from 'lucide-react';
+import { Cat, Rocket, Sparkles, Trophy, Monitor, FileText, BarChart } from 'lucide-react';
 import { LibraryData, ReadingProfile } from './types';
 
 export const LIBRARY: LibraryData = {
+  "Nivelamento": {
+    icon: <BarChart className="w-6 h-6" />,
+    color: "bg-slate-200 text-slate-700",
+    texts: {
+      facil: [
+        "O menino joga bola no parque. O sol brilha forte no céu azul. A menina come uma maçã vermelha. O cachorro corre atrás do gato. A escola é grande e bonita. Eu gosto de ler livros. A chuva molha a terra. O passarinho canta na janela. Minha bicicleta é muito rápida. O bolo de chocolate é gostoso."
+      ],
+      medio: [
+        "O menino joga bola no parque. O sol brilha forte no céu azul. A menina come uma maçã vermelha. O cachorro corre atrás do gato. A escola é grande e bonita. Eu gosto de ler livros. A chuva molha a terra. O passarinho canta na janela. Minha bicicleta é muito rápida. O bolo de chocolate é gostoso."
+      ],
+      dificil: [
+        "O menino joga bola no parque. O sol brilha forte no céu azul. A menina come uma maçã vermelha. O cachorro corre atrás do gato. A escola é grande e bonita. Eu gosto de ler livros. A chuva molha a terra. O passarinho canta na janela. Minha bicicleta é muito rápida. O bolo de chocolate é gostoso."
+      ]
+    }
+  },
   "Avaliação CAEd 2025": {
     icon: <FileText className="w-6 h-6" />,
     color: "bg-teal-100 text-teal-700",
