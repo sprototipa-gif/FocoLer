@@ -31,21 +31,22 @@ const getSimilarity = (s1: string, s2: string): number => {
   return (longer.length - getLevenshteinDistance(s1, s2)) / longer.length;
 };
 
-// Enhanced cleaning: Removes accents (NFD), punctuation, and lowercases.
+// Enhanced cleaning: Removes accents (NFD), punctuation, hyphens and lowercases.
 const cleanWord = (word: string): string => {
   return word
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "") // Remove accents
-    .replace(/[^a-z0-9]/g, "") // Remove non-alphanumeric strictly
+    .replace(/-/g, "") // Remove hyphens (beija-flor -> beijaflor)
+    .replace(/[^a-z0-9]/g, "") // Remove non-alphanumeric
     .trim();
 };
 
-// Dynamic Threshold based on word length to avoid false positives on short words
+// Dynamic Threshold based on word length
 const getMatchThreshold = (wordLength: number): number => {
-  if (wordLength <= 2) return 0.95; // Strict for 'e', 'a', 'o', 'de'
-  if (wordLength <= 4) return 0.80; // Moderate for small words
-  return 0.60; // Tolerant for longer words (kids stutter/slur/pluralize)
+  if (wordLength <= 2) return 0.85; // Reduced slightly to allow natural reading of 'e', 'a', 'o'
+  if (wordLength <= 4) return 0.75; // Moderate
+  return 0.60; // Tolerant for longer words
 };
 
 const calculateFluencyScore = (
@@ -133,12 +134,10 @@ export default function App() {
           if (!runningRef.current) return;
           
           const results = event.results;
-          // We process the LAST transcript segment.
-          // In continuous mode, results accumulate. We generally want the last item.
-          // However, we must be careful with 'interim' vs 'final'.
           const lastResult = results[results.length - 1];
           const transcript = lastResult[0].transcript.toLowerCase();
           
+          // Split transcript into individual cleaned words
           const spokenWordsRaw = transcript.split(/\s+/);
           const spokenWords = spokenWordsRaw
             .map((w: string) => cleanWord(w))
@@ -146,24 +145,21 @@ export default function App() {
             
           if (spokenWords.length === 0) return;
 
-          // --- SEQUENTIAL ALIGNMENT & ANCHOR LOGIC ---
+          // --- ROBUST SEQUENTIAL ALIGNMENT & DOUBLE ANCHOR LOGIC ---
           
-          // Look at the last N words spoken to catch up if user reads fast
-          const PROCESS_WINDOW = 15; 
+          const PROCESS_WINDOW = 12; // Look at last 12 spoken words
           const batch = spokenWords.slice(-PROCESS_WINDOW); 
           
           let currentIndex = indexRef.current;
           const allWords = wordsRef.current;
-          const LOOKAHEAD_LIMIT = 15; 
+          const LOOKAHEAD_LIMIT = 8; // How far ahead in text we check
 
           let changesMade = false;
           let newWordsArray = [...allWords];
 
-          // We iterate through the spoken batch.
+          // Iterate through recent spoken words
           for (let i = 0; i < batch.length; i++) {
             const spoken = batch[i];
-            const nextSpoken = i + 1 < batch.length ? batch[i + 1] : null;
-
             if (currentIndex >= allWords.length) break;
 
             // 1. Check EXACT Match at Current Index
@@ -172,22 +168,21 @@ export default function App() {
             const thresholdCurrent = getMatchThreshold(targetWordClean.length);
 
             if (simCurrent >= thresholdCurrent) {
-              // HIT
               if (newWordsArray[currentIndex].status === 'pending') {
                 newWordsArray[currentIndex].status = simCurrent > 0.9 ? 'correct' : 'near';
                 currentIndex++;
                 changesMade = true;
-                continue; // Move to next spoken word
+                continue;
               }
             }
 
-            // 2. If no match, search for ANCHOR ahead (Skip logic)
-            // We only skip if we find a strong match further ahead.
-            // To be safe, we prefer "Double Match" (Sequence) if possible.
+            // 2. ANCHOR SEARCH (Skip Logic)
+            // We ONLY skip if we find a sequence match (Double Anchor) or a very distinct long word.
+            // This prevents skipping "mora na" just because we heard "lagoa" (which might be noise).
             
             let bestSkipIndex = -1;
-            let bestSkipScore = 0;
-
+            
+            // Check the next few words in the text
             for (let offset = 1; offset <= LOOKAHEAD_LIMIT; offset++) {
                const targetIdx = currentIndex + offset;
                if (targetIdx >= allWords.length) break;
@@ -197,13 +192,12 @@ export default function App() {
                const thresh = getMatchThreshold(tWord.length);
 
                if (sim >= thresh) {
-                 // Found a potential skip match.
-                 
-                 // CHECK CONFIRMATION: Does the NEXT spoken word match the NEXT target word?
-                 // Or is this a very unique/long word match?
+                 // Potential match found ahead. verify it.
                  let confirmed = false;
                  
-                 // Method A: Sequence Match (Strongest Proof)
+                 // Condition A: Two-Word Sequence (Strongest)
+                 // Do we see the NEXT spoken word matching the NEXT target word?
+                 const nextSpoken = i + 1 < batch.length ? batch[i + 1] : null;
                  if (nextSpoken && targetIdx + 1 < allWords.length) {
                     const nextTWord = allWords[targetIdx + 1].clean;
                     const nextSim = getSimilarity(nextSpoken, nextTWord);
@@ -212,33 +206,34 @@ export default function App() {
                     }
                  }
 
-                 // Method B: Strong Single Match on Long Word
-                 if (!confirmed && tWord.length > 4 && sim > 0.9) {
+                 // Condition B: Very Strong Match on a Long, Unique Word (>5 chars)
+                 if (!confirmed && tWord.length >= 5 && sim > 0.9) {
                     confirmed = true;
                  }
 
                  if (confirmed) {
                     bestSkipIndex = targetIdx;
-                    bestSkipScore = sim;
-                    break; // Stop searching, we found our anchor
+                    break; 
                  }
                }
             }
 
             if (bestSkipIndex !== -1) {
-               // EXECUTE SKIP
-               // Mark skipped words
+               // EXECUTE SKIP - But be careful.
+               // Mark intermediate words as skipped
                for (let k = currentIndex; k < bestSkipIndex; k++) {
                   if (newWordsArray[k].status === 'pending') {
                      newWordsArray[k].status = 'skipped';
                   }
                }
-               // Mark anchor word
+               // Mark the anchor word as read
                if (newWordsArray[bestSkipIndex].status === 'pending') {
-                  newWordsArray[bestSkipIndex].status = bestSkipScore > 0.9 ? 'correct' : 'near';
+                  newWordsArray[bestSkipIndex].status = 'correct'; // Assume correct if anchor hit
                }
                currentIndex = bestSkipIndex + 1;
                changesMade = true;
+               // Skip the 'nextSpoken' in loop if we used it for confirmation? 
+               // Not strictly necessary as the loop will handle it naturally or re-confirm.
             }
           }
 
@@ -294,7 +289,7 @@ export default function App() {
   const startReading = (text: string) => {
     stopTTS();
     setCurrentTextOriginal(text);
-    // Use the advanced cleaner for the target words too
+    // Clean target words
     const words: WordObject[] = text.trim().split(/\s+/).map(w => ({
       original: w,
       clean: cleanWord(w),
