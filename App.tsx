@@ -44,9 +44,9 @@ const cleanWord = (word: string): string => {
 
 // Dynamic Threshold based on word length
 const getMatchThreshold = (wordLength: number): number => {
-  if (wordLength <= 2) return 0.85; // Reduced slightly to allow natural reading of 'e', 'a', 'o'
-  if (wordLength <= 4) return 0.75; // Moderate
-  return 0.60; // Tolerant for longer words
+  if (wordLength <= 2) return 0.90; // Strict for very short words
+  if (wordLength <= 4) return 0.80; // Moderate
+  return 0.65; // Tolerant for longer words
 };
 
 const calculateFluencyScore = (
@@ -104,6 +104,7 @@ export default function App() {
   const wordsRef = useRef<WordObject[]>([]);
   const indexRef = useRef(0);
   const runningRef = useRef(false);
+  const activeWordRef = useRef<HTMLSpanElement | null>(null);
 
   // Check Access on Mount
   useEffect(() => {
@@ -117,6 +118,13 @@ export default function App() {
   useEffect(() => { wordsRef.current = wordsArray; }, [wordsArray]);
   useEffect(() => { indexRef.current = currentWordIndex; }, [currentWordIndex]);
   useEffect(() => { runningRef.current = isTimerRunning; }, [isTimerRunning]);
+
+  // Auto Scroll
+  useEffect(() => {
+    if (activeWordRef.current && isTimerRunning) {
+      activeWordRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [currentWordIndex, isTimerRunning]);
 
   // Speech Recognition Setup
   useEffect(() => {
@@ -152,7 +160,7 @@ export default function App() {
           
           let currentIndex = indexRef.current;
           const allWords = wordsRef.current;
-          const LOOKAHEAD_LIMIT = 8; // How far ahead in text we check
+          const LOOKAHEAD_LIMIT = 8; 
 
           let changesMade = false;
           let newWordsArray = [...allWords];
@@ -162,10 +170,12 @@ export default function App() {
             const spoken = batch[i];
             if (currentIndex >= allWords.length) break;
 
-            // 1. Check EXACT Match at Current Index
             const targetWordClean = allWords[currentIndex].clean;
+            const targetLength = targetWordClean.length;
+
+            // 1. Check EXACT Match at Current Index
             const simCurrent = getSimilarity(spoken, targetWordClean);
-            const thresholdCurrent = getMatchThreshold(targetWordClean.length);
+            const thresholdCurrent = getMatchThreshold(targetLength);
 
             if (simCurrent >= thresholdCurrent) {
               if (newWordsArray[currentIndex].status === 'pending') {
@@ -176,13 +186,25 @@ export default function App() {
               }
             }
 
+            // 1.5 Check Compound Word Match (Spoken "beija" + "flor" = Target "beijaflor")
+            if (i + 1 < batch.length) {
+              const combinedSpoken = spoken + batch[i+1];
+              const simCombined = getSimilarity(combinedSpoken, targetWordClean);
+              if (simCombined >= thresholdCurrent) {
+                 if (newWordsArray[currentIndex].status === 'pending') {
+                    newWordsArray[currentIndex].status = simCombined > 0.9 ? 'correct' : 'near';
+                    currentIndex++;
+                    changesMade = true;
+                    // Skip next spoken word in loop logic effectively by letting loop continue
+                    // Ideally we should jump `i`, but simple iteration is robust enough with overlap
+                    continue; 
+                 }
+              }
+            }
+
             // 2. ANCHOR SEARCH (Skip Logic)
-            // We ONLY skip if we find a sequence match (Double Anchor) or a very distinct long word.
-            // This prevents skipping "mora na" just because we heard "lagoa" (which might be noise).
-            
             let bestSkipIndex = -1;
             
-            // Check the next few words in the text
             for (let offset = 1; offset <= LOOKAHEAD_LIMIT; offset++) {
                const targetIdx = currentIndex + offset;
                if (targetIdx >= allWords.length) break;
@@ -192,11 +214,9 @@ export default function App() {
                const thresh = getMatchThreshold(tWord.length);
 
                if (sim >= thresh) {
-                 // Potential match found ahead. verify it.
                  let confirmed = false;
                  
                  // Condition A: Two-Word Sequence (Strongest)
-                 // Do we see the NEXT spoken word matching the NEXT target word?
                  const nextSpoken = i + 1 < batch.length ? batch[i + 1] : null;
                  if (nextSpoken && targetIdx + 1 < allWords.length) {
                     const nextTWord = allWords[targetIdx + 1].clean;
@@ -206,8 +226,8 @@ export default function App() {
                     }
                  }
 
-                 // Condition B: Very Strong Match on a Long, Unique Word (>5 chars)
-                 if (!confirmed && tWord.length >= 5 && sim > 0.9) {
+                 // Condition B: Very Strong Match on a Long Word (>5 chars)
+                 if (!confirmed && tWord.length >= 5 && sim > 0.85) {
                     confirmed = true;
                  }
 
@@ -219,7 +239,6 @@ export default function App() {
             }
 
             if (bestSkipIndex !== -1) {
-               // EXECUTE SKIP - But be careful.
                // Mark intermediate words as skipped
                for (let k = currentIndex; k < bestSkipIndex; k++) {
                   if (newWordsArray[k].status === 'pending') {
@@ -228,12 +247,10 @@ export default function App() {
                }
                // Mark the anchor word as read
                if (newWordsArray[bestSkipIndex].status === 'pending') {
-                  newWordsArray[bestSkipIndex].status = 'correct'; // Assume correct if anchor hit
+                  newWordsArray[bestSkipIndex].status = 'correct'; 
                }
                currentIndex = bestSkipIndex + 1;
                changesMade = true;
-               // Skip the 'nextSpoken' in loop if we used it for confirmation? 
-               // Not strictly necessary as the loop will handle it naturally or re-confirm.
             }
           }
 
@@ -633,8 +650,9 @@ export default function App() {
             {wordsArray.map((item, index) => {
               // Reading Mode UI - Background highlights for clarity
               let statusClass = "mr-2 mb-3 px-2 py-1 rounded-lg inline-block text-slate-400 transition-colors duration-300";
+              const isCurrent = index === currentWordIndex;
               
-              if (index === currentWordIndex) {
+              if (isCurrent) {
                 statusClass = "mr-2 mb-3 px-2 py-1 rounded-lg inline-block bg-indigo-600 text-white font-bold transform scale-105 shadow-md";
               }
               else if (item.status === 'correct') {
@@ -650,7 +668,15 @@ export default function App() {
                 statusClass = "mr-2 mb-3 px-2 py-1 rounded-lg inline-block text-slate-800";
               }
 
-              return <span key={index} className={statusClass}>{item.original}</span>;
+              return (
+                <span 
+                  key={index} 
+                  ref={isCurrent ? activeWordRef : null}
+                  className={statusClass}
+                >
+                  {item.original}
+                </span>
+              );
             })}
           </div>
         </Card>
