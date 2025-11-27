@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BookOpen, Mic, Play, RotateCcw, Award, BarChart2, CheckCircle, Wand2, MicOff, AlertCircle, ArrowLeft, Download, Clock, PieChart, Activity, Eye, Edit, Volume2, StopCircle, ChevronRight, X, Lock, Key, Crown, Zap, Brain, Layout, Sparkles, CheckSquare, UserCheck, MessageSquare, Star, Smile, Heart } from 'lucide-react';
+import { BookOpen, Mic, Play, RotateCcw, Award, BarChart2, CheckCircle, Wand2, MicOff, AlertCircle, ArrowLeft, Download, Clock, PieChart, Activity, Eye, Edit, Volume2, StopCircle, ChevronRight, X, Lock, Key, Crown, Zap, Brain, Layout, Sparkles, CheckSquare, UserCheck, MessageSquare, Star, Smile, Heart, Info } from 'lucide-react';
 import { Button, Card } from './components/UI';
 import { LIBRARY, LEVELS, PREMIUM_CODE } from './constants';
 import { DifficultyLevel, IWindow, ReadingResult, WordObject, HeatmapItem } from './types';
@@ -629,6 +629,18 @@ export default function App() {
     const circumference = 2 * Math.PI * radius;
     const offset = circumference - (correctPct / 100) * circumference;
 
+    const getPedagogicalFeedback = (classification: string) => {
+        if (classification === 'Avançado') {
+            return "Excelente desempenho! O estudante lê com automaticidade (PPM alto) e precisão. Isso indica que a decodificação já está consolidada, liberando recursos cognitivos para a compreensão profunda e interpretação de textos complexos.";
+        } else if (classification === 'Adequado') {
+            return "Bom desempenho. O estudante lê de forma funcional, mas ainda pode apresentar pausas ou hesitações que oscilam a fluidez. A prática contínua de leitura em voz alta ajudará a automatizar o reconhecimento de palavras e aumentar o ritmo.";
+        } else {
+            return "Atenção necessária. O ritmo de leitura está abaixo do esperado para uma compreensão fluida, indicando esforço excessivo na decodificação das palavras. Recomenda-se atividades de reforço fonológico e leitura repetida de textos curtos.";
+        }
+    };
+
+    const feedback = getPedagogicalFeedback(resultData.classification);
+
     return (
       <div className="pt-4 text-center space-y-6 animate-fade-in pb-10 w-full px-2">
         <div className="flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
@@ -679,6 +691,14 @@ export default function App() {
                <div className="text-[10px] uppercase font-bold text-slate-400">Tempo Total</div>
              </div>
           </div>
+        </div>
+
+        {/* Análise Pedagógica Box */}
+        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-left shadow-sm">
+            <h3 className="font-display font-bold text-slate-700 mb-2 flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-violet-500" /> Análise Pedagógica
+            </h3>
+            <p className="text-slate-600 text-sm leading-relaxed">{feedback}</p>
         </div>
 
         {isSimulado && (
