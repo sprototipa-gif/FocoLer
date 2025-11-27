@@ -1,3 +1,4 @@
+
 import { ReactNode } from 'react';
 
 export type DifficultyLevel = 'facil' | 'medio' | 'dificil';
@@ -16,62 +17,58 @@ export interface LibraryData {
 
 export interface ReadingProfile {
   label: string;
-  minPPM: number;
   color: string;
   bg: string;
+  description: string;
+  minPPM?: number;
+  maxPPM?: number;
 }
 
-export interface HeatmapItem {
+export interface WordAnalysis {
   word: string;
-  status: 'correct' | 'near' | 'skipped' | 'pending';
+  status: 'correct' | 'approximate' | 'wrong' | 'skipped';
+  timestamp_start?: number;
+  timestamp_end?: number;
 }
 
-export interface ReadingLog {
-  id: string;
-  studentId: string;
-  date: string;
-  timestamp: number;
-  category: string;
-  level: DifficultyLevel;
+export interface GeminiAnalysisResponse {
+  total_words_reference: number;
+  total_words_read_correctly: number;
+  duration_seconds: number;
+  transcription: string;
+  words: WordAnalysis[];
+}
+
+export interface ReadingResult {
   ppm: number;
   accuracy: number;
   time: number;
   totalWords: number;
   correctWords: number;
-  fluencyScore: number;
-  classification: string;
-  heatmap: HeatmapItem[];
+  profile: ReadingProfile;
+  date: string;
+  analysis: GeminiAnalysisResponse;
 }
 
+export interface AccessibilitySettings {
+  font: 'default' | 'dyslexic';
+  highContrast: boolean;
+  readingRuler: boolean;
+}
+
+// Storage Types
 export interface Student {
   id: string;
   name: string;
-  level: DifficultyLevel; // Nível recomendado
+  level: DifficultyLevel;
   createdAt: number;
 }
 
-export interface ReadingResult {
+export interface ReadingLog {
+  id: string;
+  studentId: string;
+  timestamp: number;
   ppm: number;
-  time: number;
-  words: number;
-  totalWords: number;
-  profile: ReadingProfile;
-  date: string;
-  fluencyScore: number;
-  classification: string;
-  heatmap?: HeatmapItem[]; // Optional for UI passing
-}
-
-export type WordStatus = 'pending' | 'correct' | 'near' | 'skipped';
-
-export interface WordObject {
-  original: string;
-  clean: string;
-  status: WordStatus;
-}
-
-// Web Speech API Types
-export interface IWindow extends Window {
-  SpeechRecognition: any;
-  webkitSpeechRecognition: any;
+  accuracy: number;
+  level: DifficultyLevel;
 }

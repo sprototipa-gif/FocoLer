@@ -5,6 +5,40 @@ import { LibraryData, ReadingProfile } from './types';
 export const ACCESS_CODE = "focoler2025";
 export const PREMIUM_CODE = "focolerpro2025";
 
+export const LEVELS: { [key: string]: ReadingProfile } = {
+  PRE_LEITOR: { 
+    label: "Pré-Leitor", 
+    minPPM: 0, 
+    maxPPM: 59,
+    color: "text-red-500", 
+    bg: "bg-red-100",
+    description: "Necessita instrução fônica. Foco na precisão de palavras."
+  },
+  INICIANTE: { 
+    label: "Leitor Iniciante", 
+    minPPM: 60, 
+    maxPPM: 89,
+    color: "text-amber-600", 
+    bg: "bg-amber-100",
+    description: "Lê com pausas. Transição para leitura fluida (2º Ano)."
+  },
+  EM_DESENVOLVIMENTO: { 
+    label: "Em Desenvolvimento", 
+    minPPM: 90, 
+    maxPPM: 119,
+    color: "text-sky-600", 
+    bg: "bg-sky-100",
+    description: "Consolidando a fluência (3º Ano)."
+  },
+  FLUENTE: { 
+    label: "Leitor Fluente", 
+    minPPM: 120, 
+    color: "text-emerald-600", 
+    bg: "bg-emerald-100",
+    description: "Leitura automatizada e expressiva (4º/5º Ano)."
+  }
+};
+
 export const LIBRARY: LibraryData = {
   "Nivelamento": {
     icon: <BarChart className="w-6 h-6" />,
@@ -250,10 +284,4 @@ export const LIBRARY: LibraryData = {
       ]
     }
   }
-};
-
-export const LEVELS: { [key: string]: ReadingProfile } = {
-  PRE_LEITOR: { label: "Pré-Leitor", minPPM: 0, color: "text-red-500", bg: "bg-red-100" },
-  INICIANTE: { label: "Leitor Iniciante", minPPM: 60, color: "text-yellow-600", bg: "bg-yellow-100" },
-  FLUENTE: { label: "Leitor Fluente", minPPM: 90, color: "text-green-600", bg: "bg-green-100" }
 };
