@@ -3,6 +3,7 @@ import { Cat, Rocket, Sparkles, Trophy, Monitor, FileText, BarChart } from 'luci
 import { LibraryData, ReadingProfile } from './types';
 
 export const ACCESS_CODE = "focoler2025";
+export const PREMIUM_CODE = "focolerpro2025";
 
 export const LIBRARY: LibraryData = {
   "Nivelamento": {

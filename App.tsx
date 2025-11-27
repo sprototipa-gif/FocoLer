@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BookOpen, Mic, Play, RotateCcw, Award, BarChart2, CheckCircle, Wand2, MicOff, AlertCircle, ArrowLeft, Download, Clock, PieChart, Activity, Eye, Edit, Volume2, StopCircle, ChevronRight, X, Lock, Key } from 'lucide-react';
+import { BookOpen, Mic, Play, RotateCcw, Award, BarChart2, CheckCircle, Wand2, MicOff, AlertCircle, ArrowLeft, Download, Clock, PieChart, Activity, Eye, Edit, Volume2, StopCircle, ChevronRight, X, Lock, Key, Crown } from 'lucide-react';
 import { Button, Card } from './components/UI';
-import { LIBRARY, LEVELS, ACCESS_CODE } from './constants';
+import { LIBRARY, LEVELS, ACCESS_CODE, PREMIUM_CODE } from './constants';
 import { DifficultyLevel, IWindow, ReadingResult, WordObject, HeatmapItem } from './types';
 import { generateStory } from './services/geminiService';
 
@@ -76,10 +76,16 @@ export default function App() {
   // Views
   const [view, setView] = useState<'home' | 'text_selection' | 'reading' | 'results' | 'generating' | 'custom_text'>('home');
   
-  // Access Control
+  // Access Control & Tiers
   const [isLocked, setIsLocked] = useState(true);
+  const [isPremium, setIsPremium] = useState(false);
   const [accessInput, setAccessInput] = useState('');
   const [accessError, setAccessError] = useState(false);
+  
+  // Premium Upgrade UI
+  const [showPremiumInput, setShowPremiumInput] = useState(false);
+  const [premiumInput, setPremiumInput] = useState('');
+  const [premiumError, setPremiumError] = useState(false);
 
   // Reading Config
   const [selectedLevel, setSelectedLevel] = useState<DifficultyLevel>('medio');
@@ -109,8 +115,13 @@ export default function App() {
   // Check Access on Mount
   useEffect(() => {
     const savedAccess = localStorage.getItem('focoler_access');
-    if (savedAccess === ACCESS_CODE) {
+    const savedTier = localStorage.getItem('focoler_tier'); // 'standard' | 'premium'
+    
+    if (savedAccess === ACCESS_CODE || savedAccess === PREMIUM_CODE) {
       setIsLocked(false);
+      if (savedTier === 'premium') {
+        setIsPremium(true);
+      }
     }
   }, []);
 
@@ -305,12 +316,31 @@ export default function App() {
   const unlockApp = () => {
     if (accessInput === ACCESS_CODE) {
       localStorage.setItem('focoler_access', ACCESS_CODE);
+      localStorage.setItem('focoler_tier', 'standard');
+      setIsPremium(false);
+      setIsLocked(false);
+      setAccessError(false);
+    } else if (accessInput === PREMIUM_CODE) {
+      localStorage.setItem('focoler_access', PREMIUM_CODE);
+      localStorage.setItem('focoler_tier', 'premium');
+      setIsPremium(true);
       setIsLocked(false);
       setAccessError(false);
     } else {
       setAccessError(true);
     }
   };
+
+  const handlePremiumUnlock = () => {
+    if (premiumInput === PREMIUM_CODE) {
+      localStorage.setItem('focoler_tier', 'premium');
+      setIsPremium(true);
+      setShowPremiumInput(false);
+      setPremiumError(false);
+    } else {
+      setPremiumError(true);
+    }
+  }
 
   const startReading = (text: string) => {
     stopTTS();
@@ -444,10 +474,11 @@ export default function App() {
   );
 
   const renderHome = () => (
-    <div className="space-y-6 animate-fade-in w-full pt-4">
-      <div className="text-center">
+    <div className="space-y-6 animate-fade-in w-full pt-4 relative">
+      <div className="text-center relative">
           <h1 className="font-extrabold text-3xl text-indigo-600 tracking-tight">FocoLer</h1>
           <p className="text-sm text-slate-400 font-medium">Treinador de Fluência Leitora</p>
+          {isPremium && <div className="absolute top-0 right-2 md:right-10 flex flex-col items-center"><Crown className="w-6 h-6 text-amber-400 fill-amber-400" /><span className="text-[10px] font-bold text-amber-500 uppercase">Premium</span></div>}
       </div>
 
       <div className="flex flex-col gap-2 items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
@@ -467,25 +498,73 @@ export default function App() {
             </button>
           ))}
         </div>
+        
+        {/* Premium Upgrade Button below level selector */}
+        {!isPremium && (
+          <button 
+            onClick={() => setShowPremiumInput(true)}
+            className="text-xs font-bold text-indigo-500 hover:text-indigo-700 hover:underline mt-2 flex items-center gap-1"
+          >
+            <Crown className="w-3 h-3" /> Acessar versão Premium
+          </button>
+        )}
       </div>
 
-      {/* Leveling CTA */}
-      <Card onClick={() => { setSelectedCategory('Nivelamento'); startReading(LIBRARY['Nivelamento'].texts['medio'][0]); }} 
-        className="p-4 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white cursor-pointer hover:shadow-lg transition-all active:scale-95 relative overflow-hidden">
-        <div className="absolute right-0 top-0 opacity-10 transform translate-x-2 -translate-y-2">
-            <Award className="w-24 h-24" />
+      {/* Premium Input Dialog */}
+      {showPremiumInput && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6 animate-fade-in">
+          <Card className="p-6 w-full max-w-sm space-y-4 relative">
+            <button onClick={() => { setShowPremiumInput(false); setPremiumError(false); }} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X className="w-5 h-5"/></button>
+            <div className="flex flex-col items-center">
+              <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mb-3">
+                <Crown className="w-6 h-6 text-amber-500" />
+              </div>
+              <h3 className="font-bold text-lg text-slate-800">Desbloquear Premium</h3>
+              <p className="text-xs text-slate-500 text-center mb-4">Insira o código premium para liberar Simulados e Textos Personalizados.</p>
+              
+              <div className="w-full space-y-3">
+                <input 
+                  type="text" 
+                  value={premiumInput}
+                  onChange={(e) => { setPremiumInput(e.target.value); setPremiumError(false); }}
+                  placeholder="Código Premium"
+                  className={`w-full px-4 py-2 border rounded-lg outline-none ${premiumError ? 'border-red-300 bg-red-50' : 'border-slate-200 focus:border-amber-400'}`}
+                />
+                {premiumError && <p className="text-red-500 text-xs font-bold text-center">Código incorreto.</p>}
+                <Button onClick={handlePremiumUnlock} className="w-full bg-amber-500 hover:bg-amber-600 text-white shadow-amber-200">Confirmar</Button>
+              </div>
+            </div>
+          </Card>
         </div>
-        <div className="flex items-center gap-4 relative z-10">
-          <div className="p-3 bg-white/20 rounded-full backdrop-blur-sm"><Award className="w-6 h-6 text-white" /></div>
-          <div>
-            <h3 className="font-bold text-lg">Teste de Nivelamento</h3>
-            <p className="text-xs text-white/90">Faça uma leitura de calibração</p>
+      )}
+
+      {/* Leveling CTA - Only for Premium */}
+      {isPremium && (
+        <Card onClick={() => { setSelectedCategory('Nivelamento'); startReading(LIBRARY['Nivelamento'].texts['medio'][0]); }} 
+          className="p-4 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white cursor-pointer hover:shadow-lg transition-all active:scale-95 relative overflow-hidden">
+          <div className="absolute right-0 top-0 opacity-10 transform translate-x-2 -translate-y-2">
+              <Award className="w-24 h-24" />
           </div>
-        </div>
-      </Card>
+          <div className="flex items-center gap-4 relative z-10">
+            <div className="p-3 bg-white/20 rounded-full backdrop-blur-sm"><Award className="w-6 h-6 text-white" /></div>
+            <div>
+              <h3 className="font-bold text-lg">Teste de Nivelamento</h3>
+              <p className="text-xs text-white/90">Faça uma leitura de calibração</p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
-        {Object.entries(LIBRARY).filter(([k]) => k !== 'Nivelamento').map(([name, data]) => (
+        {Object.entries(LIBRARY)
+          .filter(([k]) => {
+            // Remove 'Nivelamento' from standard list (it has its own big card)
+            if (k === 'Nivelamento') return false;
+            // Remove 'Simulado' if not premium
+            if (k === 'Simulado' && !isPremium) return false;
+            return true;
+          })
+          .map(([name, data]) => (
           <Card key={name} onClick={() => { setSelectedCategory(name); setView('text_selection'); }}
             className={`p-4 cursor-pointer hover:border-indigo-200 transition-all active:scale-95 border-2 ${name === "Simulado" ? 'border-teal-100 bg-teal-50' : 'border-slate-100'}`}>
             <div className={`w-10 h-10 rounded-full ${data.color} flex items-center justify-center mb-3`}>
@@ -497,9 +576,11 @@ export default function App() {
         ))}
       </div>
 
-      <Button variant="secondary" className="w-full py-3 text-sm" onClick={() => { setCustomTextInput(''); setView('custom_text'); }}>
-        <Edit className="w-4 h-4" /> Colar Texto Próprio
-      </Button>
+      {isPremium && (
+        <Button variant="secondary" className="w-full py-3 text-sm" onClick={() => { setCustomTextInput(''); setView('custom_text'); }}>
+          <Edit className="w-4 h-4" /> Colar Texto Próprio
+        </Button>
+      )}
     </div>
   );
 
