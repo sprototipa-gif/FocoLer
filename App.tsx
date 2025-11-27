@@ -260,12 +260,10 @@ export default function App() {
 
             // Se confirmamos um pulo válido
             if (bestSkipIndex !== -1) {
-               // Marca as intermediárias como 'skipped'
-               for (let k = currentIndex; k < bestSkipIndex; k++) {
-                  if (newWordsArray[k].status === 'pending') {
-                      newWordsArray[k] = { ...newWordsArray[k], status: 'skipped' };
-                  }
-               }
+               // Marca as intermediárias como 'skipped' APENAS NO FINAL
+               // Por enquanto, apenas pulamos o indice. O finishReading vai marcar como skipped
+               // Mas para UX, vamos manter o status 'pending' para não distrair
+               
                // Marca a encontrada como 'correct'
                if (newWordsArray[bestSkipIndex].status === 'pending') {
                    newWordsArray[bestSkipIndex] = { ...newWordsArray[bestSkipIndex], status: 'correct' }; 
@@ -375,17 +373,45 @@ export default function App() {
 
   const finishReading = () => {
     stopListening();
-    const correctWords = wordsArray.filter(w => w.status === 'correct').length;
-    const nearWords = wordsArray.filter(w => w.status === 'near').length;
+    
+    // Late Validation: Mark skipped words
+    const finalWords = [...wordsArray];
+    // Encontra o último índice que foi marcado como correto
+    let lastCorrectIndex = -1;
+    for (let i = finalWords.length - 1; i >= 0; i--) {
+        if (finalWords[i].status === 'correct') {
+            lastCorrectIndex = i;
+            break;
+        }
+    }
+
+    // Marca todos os pendentes ANTES do último correto como 'skipped'
+    if (lastCorrectIndex !== -1) {
+        for (let i = 0; i < lastCorrectIndex; i++) {
+            if (finalWords[i].status === 'pending') {
+                finalWords[i].status = 'skipped';
+            }
+        }
+    }
+    
+    // Atualiza o estado para refletir os skips no relatório
+    setWordsArray(finalWords);
+
+    const correctWords = finalWords.filter(w => w.status === 'correct').length;
+    const nearWords = finalWords.filter(w => w.status === 'near').length;
     const validWords = correctWords + nearWords;
-    const processedWords = wordsArray.filter(w => w.status !== 'pending').length;
+    const processedWords = finalWords.filter(w => w.status !== 'pending').length;
+    
+    // PPM é baseado nas palavras processadas no tempo decorrido, mas ajustado pela precisão
     const { nota, classificacao, ppm } = calculateFluencyScore(processedWords > 0 ? processedWords : validWords, validWords, timeElapsed);
+    
     let profile = LEVELS.PRE_LEITOR;
     if (ppm >= LEVELS.FLUENTE.minPPM) profile = LEVELS.FLUENTE;
     else if (ppm >= LEVELS.INICIANTE.minPPM) profile = LEVELS.INICIANTE;
-    const heatmap: HeatmapItem[] = wordsArray.map(w => ({ word: w.original, status: w.status }));
+    
+    const heatmap: HeatmapItem[] = finalWords.map(w => ({ word: w.original, status: w.status }));
     const result: ReadingResult = {
-      ppm, time: timeElapsed, words: validWords, totalWords: wordsArray.length,
+      ppm, time: timeElapsed, words: validWords, totalWords: finalWords.length,
       profile, date: new Date().toLocaleDateString('pt-BR'), fluencyScore: nota, classification: classificacao, heatmap
     };
     setResultData(result);
@@ -428,7 +454,7 @@ export default function App() {
           </h1>
           
           <p className="text-lg md:text-xl text-slate-600 max-w-2xl mx-auto leading-relaxed animate-fade-in" style={{ animationDelay: '0.2s' }}>
-            A ferramenta definitiva para avaliar e desenvolver a fluência leitora de forma lúdica, simples e precisa.
+            Uma ferramenta para ajudar a desenvolver a fluência leitora de forma lúdica, simples e precisa.
           </p>
           
           <div className="flex flex-col md:flex-row gap-4 justify-center items-center animate-fade-in" style={{ animationDelay: '0.3s' }}>
