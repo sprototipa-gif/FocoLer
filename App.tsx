@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BookOpen, Mic, Play, RotateCcw, Award, BarChart2, CheckCircle, Wand2, MicOff, AlertCircle, ArrowLeft, Download, Clock, PieChart, Activity, Eye, Edit, Volume2, StopCircle, ChevronRight, X, Lock, Key, Crown, Zap, Brain, Layout, Sparkles } from 'lucide-react';
+import { BookOpen, Mic, Play, RotateCcw, Award, BarChart2, CheckCircle, Wand2, MicOff, AlertCircle, ArrowLeft, Download, Clock, PieChart, Activity, Eye, Edit, Volume2, StopCircle, ChevronRight, X, Lock, Key, Crown, Zap, Brain, Layout, Sparkles, CheckSquare, UserCheck, MessageSquare } from 'lucide-react';
 import { Button, Card } from './components/UI';
-import { LIBRARY, LEVELS, ACCESS_CODE, PREMIUM_CODE } from './constants';
+import { LIBRARY, LEVELS, PREMIUM_CODE } from './constants';
 import { DifficultyLevel, IWindow, ReadingResult, WordObject, HeatmapItem } from './types';
 import { generateStory } from './services/geminiService';
 
@@ -78,10 +78,7 @@ export default function App() {
   const [view, setView] = useState<'home' | 'text_selection' | 'reading' | 'results' | 'generating' | 'custom_text'>('home');
   
   // Access Control & Tiers
-  const [isLocked, setIsLocked] = useState(true);
   const [isPremium, setIsPremium] = useState(false);
-  const [accessInput, setAccessInput] = useState('');
-  const [accessError, setAccessError] = useState(false);
   
   // Premium Upgrade UI
   const [showPremiumInput, setShowPremiumInput] = useState(false);
@@ -113,16 +110,11 @@ export default function App() {
   const runningRef = useRef(false);
   const activeWordRef = useRef<HTMLSpanElement | null>(null);
 
-  // Check Access on Mount
+  // Check Premium on Mount
   useEffect(() => {
-    const savedAccess = localStorage.getItem('focoler_access');
     const savedTier = localStorage.getItem('focoler_tier'); // 'standard' | 'premium'
-    
-    if (savedAccess === ACCESS_CODE || savedAccess === PREMIUM_CODE) {
-      setIsLocked(false);
-      if (savedTier === 'premium') {
-        setIsPremium(true);
-      }
+    if (savedTier === 'premium') {
+      setIsPremium(true);
     }
   }, []);
 
@@ -314,24 +306,6 @@ export default function App() {
 
   // --- Actions ---
 
-  const unlockApp = () => {
-    if (accessInput === ACCESS_CODE) {
-      localStorage.setItem('focoler_access', ACCESS_CODE);
-      localStorage.setItem('focoler_tier', 'standard');
-      setIsPremium(false);
-      setIsLocked(false);
-      setAccessError(false);
-    } else if (accessInput === PREMIUM_CODE) {
-      localStorage.setItem('focoler_access', PREMIUM_CODE);
-      localStorage.setItem('focoler_tier', 'premium');
-      setIsPremium(true);
-      setIsLocked(false);
-      setAccessError(false);
-    } else {
-      setAccessError(true);
-    }
-  };
-
   const handlePremiumUnlock = () => {
     if (premiumInput === PREMIUM_CODE) {
       localStorage.setItem('focoler_tier', 'premium');
@@ -496,44 +470,49 @@ export default function App() {
         </Card>
       </div>
 
-      <div className="text-center pb-8 pt-4">
+      {/* Guide Section */}
+      <div className="bg-white py-12 px-6 border-t border-slate-100">
+        <div className="max-w-4xl mx-auto">
+          <h2 className="text-2xl font-extrabold text-slate-800 text-center mb-8 flex items-center justify-center gap-2">
+            <BookOpen className="w-6 h-6 text-indigo-500" />
+            Guia Rápido para Educadores e Pais
+          </h2>
+          <div className="grid md:grid-cols-2 gap-8">
+            <div className="flex gap-4">
+              <div className="w-8 h-8 bg-indigo-100 text-indigo-600 font-bold rounded-full flex items-center justify-center flex-shrink-0">1</div>
+              <div>
+                <h4 className="font-bold text-slate-800 mb-1">Selecione o Nível</h4>
+                <p className="text-sm text-slate-500">Escolha entre Fácil, Médio ou Difícil conforme a idade da criança.</p>
+              </div>
+            </div>
+            <div className="flex gap-4">
+              <div className="w-8 h-8 bg-indigo-100 text-indigo-600 font-bold rounded-full flex items-center justify-center flex-shrink-0">2</div>
+              <div>
+                <h4 className="font-bold text-slate-800 mb-1">Escolha uma História</h4>
+                <p className="text-sm text-slate-500">Navegue pelas categorias e deixe a criança escolher um tema interessante.</p>
+              </div>
+            </div>
+            <div className="flex gap-4">
+              <div className="w-8 h-8 bg-indigo-100 text-indigo-600 font-bold rounded-full flex items-center justify-center flex-shrink-0">3</div>
+              <div>
+                <h4 className="font-bold text-slate-800 mb-1">Leitura em Voz Alta</h4>
+                <p className="text-sm text-slate-500">Clique em "Começar Leitura". A criança deve ler o texto em voz alta de forma natural.</p>
+              </div>
+            </div>
+            <div className="flex gap-4">
+              <div className="w-8 h-8 bg-indigo-100 text-indigo-600 font-bold rounded-full flex items-center justify-center flex-shrink-0">4</div>
+              <div>
+                <h4 className="font-bold text-slate-800 mb-1">Análise de Resultado</h4>
+                <p className="text-sm text-slate-500">Ao final, veja a velocidade (PPM), precisão e as palavras que precisam de atenção.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="text-center pb-8 pt-8 bg-slate-50">
         <p className="text-slate-400 text-xs font-medium">© 2025 FocoLer Educacional</p>
       </div>
-    </div>
-  );
-
-  const renderGatekeeper = () => (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 animate-fade-in">
-      <div onClick={() => setShowLanding(true)} className="absolute top-6 left-6 cursor-pointer text-slate-400 hover:text-indigo-600 transition-colors flex items-center gap-2">
-        <ArrowLeft className="w-5 h-5" /> <span className="text-sm font-bold">Voltar</span>
-      </div>
-      <Card className="p-8 w-full max-w-sm text-center space-y-6 shadow-xl">
-        <div className="flex justify-center mb-4">
-          <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center">
-            <Lock className="w-8 h-8 text-indigo-600" />
-          </div>
-        </div>
-        <div>
-          <h1 className="text-2xl font-extrabold text-slate-800 mb-2">Acesso Restrito</h1>
-          <p className="text-slate-500 text-sm">Digite seu código de acesso para continuar.</p>
-        </div>
-        <div className="space-y-4">
-          <div className="relative">
-            <Key className="w-5 h-5 text-slate-400 absolute left-3 top-3.5" />
-            <input 
-              type="text" 
-              value={accessInput}
-              onChange={(e) => { setAccessInput(e.target.value); setAccessError(false); }}
-              onKeyDown={(e) => e.key === 'Enter' && unlockApp()}
-              className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl outline-none transition-colors ${accessError ? 'border-red-300 bg-red-50 text-red-900' : 'border-slate-200 focus:border-indigo-500'}`}
-              placeholder="Código de acesso"
-            />
-          </div>
-          {accessError && <p className="text-red-500 text-xs font-bold">Código inválido. Tente novamente.</p>}
-          <Button onClick={unlockApp} className="w-full py-3 text-lg">Entrar</Button>
-        </div>
-      </Card>
-      <p className="mt-8 text-slate-400 text-xs font-medium">FocoLer © 2025</p>
     </div>
   );
 
@@ -584,7 +563,7 @@ export default function App() {
                 <Crown className="w-6 h-6 text-amber-500" />
               </div>
               <h3 className="font-bold text-lg text-slate-800">Desbloquear Premium</h3>
-              <p className="text-xs text-slate-500 text-center mb-4">Insira o código premium para liberar Simulados e Textos Personalizados.</p>
+              <p className="text-xs text-slate-500 text-center mb-4">Insira o código premium para liberar Simulados, Nivelamento e todos os textos.</p>
               
               <div className="w-full space-y-3">
                 <input 
@@ -758,13 +737,22 @@ export default function App() {
 
   const renderTextSelection = () => {
     if (!selectedCategory || !LIBRARY[selectedCategory]) return null;
-    const texts = LIBRARY[selectedCategory].texts[selectedLevel];
+    const allTexts = LIBRARY[selectedCategory].texts[selectedLevel];
+    // Freemium logic: Show only 1 text if not premium
+    const texts = isPremium ? allTexts : allTexts.slice(0, 1);
+
     return (
       <div className="space-y-6 animate-fade-in pt-4 w-full">
         <div className="flex items-center gap-3 mb-2">
           <button onClick={() => setView('home')} className="p-2 -ml-2 hover:bg-slate-100 rounded-full text-slate-500"><ArrowLeft className="w-6 h-6" /></button>
           <div><h2 className="font-bold text-slate-800">{selectedCategory}</h2></div>
         </div>
+        {!isPremium && (
+          <div className="bg-amber-50 text-amber-800 p-3 rounded-xl text-xs flex items-center gap-2 border border-amber-100">
+            <Lock className="w-4 h-4 flex-shrink-0" />
+            <span className="font-medium">Modo Demonstração: Apenas 1 texto disponível. <span className="underline cursor-pointer font-bold" onClick={() => { setView('home'); setShowPremiumInput(true); }}>Seja Premium</span> para liberar tudo.</span>
+          </div>
+        )}
         <div className="grid gap-3 pb-8">
           {texts.map((text, index) => (
             <Card key={index} onClick={() => startReading(text)} className="p-4 cursor-pointer hover:border-indigo-300 transition-all active:scale-[0.99]">
@@ -841,10 +829,6 @@ export default function App() {
 
   if (showLanding) {
     return renderLandingPage();
-  }
-
-  if (isLocked) {
-    return renderGatekeeper();
   }
 
   return (
