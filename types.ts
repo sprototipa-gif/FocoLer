@@ -1,4 +1,3 @@
-
 import { ReactNode } from 'react';
 
 export type DifficultyLevel = 'facil' | 'medio' | 'dificil';
@@ -17,26 +16,26 @@ export interface LibraryData {
 
 export interface ReadingProfile {
   label: string;
+  minPPM?: number;
+  maxPPM?: number;
   color: string;
   bg: string;
   description: string;
-  minPPM?: number;
-  maxPPM?: number;
 }
 
-export interface WordAnalysis {
+export interface AnalysisWord {
   word: string;
   status: 'correct' | 'approximate' | 'wrong' | 'skipped';
   timestamp_start?: number;
   timestamp_end?: number;
 }
 
-export interface GeminiAnalysisResponse {
+export interface AnalysisResult {
   total_words_reference: number;
   total_words_read_correctly: number;
   duration_seconds: number;
   transcription: string;
-  words: WordAnalysis[];
+  words: AnalysisWord[];
 }
 
 export interface ReadingResult {
@@ -45,9 +44,10 @@ export interface ReadingResult {
   time: number;
   totalWords: number;
   correctWords: number;
-  profile: ReadingProfile;
+  classification: string;
+  classificationColor: string; // Tailwind classes
   date: string;
-  analysis: GeminiAnalysisResponse;
+  heatmap: AnalysisWord[];
 }
 
 export interface AccessibilitySettings {
@@ -56,7 +56,6 @@ export interface AccessibilitySettings {
   readingRuler: boolean;
 }
 
-// Storage Types
 export interface Student {
   id: string;
   name: string;
@@ -70,5 +69,6 @@ export interface ReadingLog {
   timestamp: number;
   ppm: number;
   accuracy: number;
-  level: DifficultyLevel;
+  textTitle?: string;
+  classification?: string;
 }
