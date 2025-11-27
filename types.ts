@@ -16,59 +16,62 @@ export interface LibraryData {
 
 export interface ReadingProfile {
   label: string;
-  minPPM?: number;
-  maxPPM?: number;
+  minPPM: number;
   color: string;
   bg: string;
-  description: string;
 }
 
-export interface AnalysisWord {
+export interface HeatmapItem {
   word: string;
-  status: 'correct' | 'approximate' | 'wrong' | 'skipped';
-  timestamp_start?: number;
-  timestamp_end?: number;
-}
-
-export interface AnalysisResult {
-  total_words_reference: number;
-  total_words_read_correctly: number;
-  duration_seconds: number;
-  transcription: string;
-  words: AnalysisWord[];
-}
-
-export interface ReadingResult {
-  ppm: number;
-  accuracy: number;
-  time: number;
-  totalWords: number;
-  correctWords: number;
-  classification: string;
-  classificationColor: string; // Tailwind classes
-  date: string;
-  heatmap: AnalysisWord[];
-}
-
-export interface AccessibilitySettings {
-  font: 'default' | 'dyslexic';
-  highContrast: boolean;
-  readingRuler: boolean;
-}
-
-export interface Student {
-  id: string;
-  name: string;
-  level: DifficultyLevel;
-  createdAt: number;
+  status: 'correct' | 'near' | 'skipped' | 'pending';
 }
 
 export interface ReadingLog {
   id: string;
   studentId: string;
+  date: string;
   timestamp: number;
+  category: string;
+  level: DifficultyLevel;
   ppm: number;
   accuracy: number;
-  textTitle?: string;
-  classification?: string;
+  time: number;
+  totalWords: number;
+  correctWords: number;
+  fluencyScore: number;
+  classification: string;
+  heatmap: HeatmapItem[];
+}
+
+export interface Student {
+  id: string;
+  name: string;
+  level: DifficultyLevel; // Nível recomendado
+  createdAt: number;
+}
+
+export interface ReadingResult {
+  ppm: number;
+  time: number;
+  words: number;
+  totalWords: number;
+  profile: ReadingProfile;
+  date: string;
+  fluencyScore: number;
+  classification: string;
+  heatmap?: HeatmapItem[]; // Optional for UI passing
+}
+
+export type WordStatus = 'pending' | 'correct' | 'near' | 'skipped';
+
+export interface WordObject {
+  original: string;
+  clean: string;
+  status: WordStatus;
+}
+
+// Web Speech API Types
+export interface IWindow extends Window {
+  SpeechRecognition: any;
+  webkitSpeechRecognition: any;
 }

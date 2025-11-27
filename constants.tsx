@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Cat, Rocket, Sparkles, Trophy, Monitor, FileText, BarChart } from 'lucide-react';
 import { LibraryData, ReadingProfile } from './types';
@@ -6,29 +5,22 @@ import { LibraryData, ReadingProfile } from './types';
 export const ACCESS_CODE = "focoler2025";
 export const PREMIUM_CODE = "focolerpro2025";
 
-// Kept mainly for reference or if we want to show badges, though logic is now in App.tsx
-export const LEVELS: { [key: string]: ReadingProfile } = {
-  PRE_LEITOR: { 
-    label: "Pré-Leitor", 
-    color: "text-red-500", 
-    bg: "bg-red-100",
-    description: ""
-  },
-  INICIANTE: { 
-    label: "Leitor Iniciante", 
-    color: "text-amber-600", 
-    bg: "bg-amber-100",
-    description: ""
-  },
-  FLUENTE: { 
-    label: "Leitor Fluente", 
-    color: "text-emerald-600", 
-    bg: "bg-emerald-100",
-    description: ""
-  }
-};
-
 export const LIBRARY: LibraryData = {
+  "Nivelamento": {
+    icon: <BarChart className="w-6 h-6" />,
+    color: "bg-slate-200 text-slate-700",
+    texts: {
+      facil: [
+        "O gato pulou no muro alto. O rato correu rápido para o buraco. O dia estava muito bonito e quente. O sol brilhava forte no céu azul. A menina jogou a bola para o alto. O menino chutou a bola no gol. Todos ficaram felizes com o jogo."
+      ],
+      medio: [
+        "A escola é um lugar muito divertido onde aprendemos coisas novas todos os dias. Na hora do recreio, gosto de brincar de pega-pega com meus amigos no pátio. Minha professora conta histórias incríveis sobre animais da floresta e planetas distantes. Eu adoro ler livros na biblioteca."
+      ],
+      dificil: [
+        "A preservação do meio ambiente é fundamental para a sobrevivência de todas as espécies no planeta Terra. As florestas ajudam a regular o clima e fornecem oxigênio limpo, enquanto os oceanos abrigam uma imensa biodiversidade marinha. É dever de todos nós adotar práticas sustentáveis, como reciclar o lixo e economizar água, para garantir um futuro saudável para as próximas gerações."
+      ]
+    }
+  },
   "Simulado": {
     icon: <FileText className="w-6 h-6" />,
     color: "bg-teal-100 text-teal-700",
@@ -258,4 +250,10 @@ export const LIBRARY: LibraryData = {
       ]
     }
   }
+};
+
+export const LEVELS: { [key: string]: ReadingProfile } = {
+  PRE_LEITOR: { label: "Pré-Leitor", minPPM: 0, color: "text-red-500", bg: "bg-red-100" },
+  INICIANTE: { label: "Leitor Iniciante", minPPM: 60, color: "text-yellow-600", bg: "bg-yellow-100" },
+  FLUENTE: { label: "Leitor Fluente", minPPM: 90, color: "text-green-600", bg: "bg-green-100" }
 };

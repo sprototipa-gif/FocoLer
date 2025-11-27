@@ -7,39 +7,14 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300..700&family=Quicksand:wght@300..700&family=Lexend:wght@300..700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300..700&family=Quicksand:wght@300..700&display=swap" rel="stylesheet">
     <style>
-      :root {
-        --font-body: 'Quicksand', sans-serif;
-        --font-display: 'Fredoka', sans-serif;
-      }
       body {
-        font-family: var(--font-body);
+        font-family: 'Quicksand', sans-serif;
       }
       h1, h2, h3, h4, h5, h6, .font-display {
-        font-family: var(--font-display);
+        font-family: 'Fredoka', sans-serif;
       }
-      
-      /* Accessibility Modes */
-      .font-dyslexic body, .font-dyslexic h1, .font-dyslexic h2, .font-dyslexic p, .font-dyslexic span {
-        font-family: 'Lexend', sans-serif !important;
-      }
-      
-      .high-contrast {
-        background-color: #000000 !important;
-        color: #FFFF00 !important;
-      }
-      .high-contrast * {
-        border-color: #FFFF00 !important;
-      }
-      .high-contrast .bg-white {
-        background-color: #000000 !important;
-        color: #FFFF00 !important;
-      }
-      .high-contrast .text-slate-500, .high-contrast .text-slate-600, .high-contrast .text-slate-400 {
-        color: #FFFF00 !important;
-      }
-      
       @keyframes fade-in {
         from { opacity: 0; transform: translateY(10px); }
         to { opacity: 1; transform: translateY(0); }
@@ -91,7 +66,7 @@
 }
 </script>
 </head>
-  <body class="bg-sky-50 text-slate-800 antialiased selection:bg-violet-200 selection:text-violet-900 transition-colors duration-300">
+  <body class="bg-sky-50 text-slate-800 antialiased selection:bg-violet-200 selection:text-violet-900">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
