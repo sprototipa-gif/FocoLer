@@ -179,7 +179,11 @@ export default function App() {
 
             if (simCurrent >= thresholdCurrent) {
               if (newWordsArray[currentIndex].status === 'pending') {
-                newWordsArray[currentIndex].status = simCurrent > 0.9 ? 'correct' : 'near';
+                // Immutable update
+                newWordsArray[currentIndex] = {
+                  ...newWordsArray[currentIndex],
+                  status: simCurrent > 0.9 ? 'correct' : 'near'
+                };
                 currentIndex++;
                 changesMade = true;
                 continue;
@@ -192,11 +196,14 @@ export default function App() {
               const simCombined = getSimilarity(combinedSpoken, targetWordClean);
               if (simCombined >= thresholdCurrent) {
                  if (newWordsArray[currentIndex].status === 'pending') {
-                    newWordsArray[currentIndex].status = simCombined > 0.9 ? 'correct' : 'near';
+                    // Immutable update
+                    newWordsArray[currentIndex] = {
+                      ...newWordsArray[currentIndex],
+                      status: simCombined > 0.9 ? 'correct' : 'near'
+                    };
                     currentIndex++;
                     changesMade = true;
                     // Skip next spoken word in loop logic effectively by letting loop continue
-                    // Ideally we should jump `i`, but simple iteration is robust enough with overlap
                     continue; 
                  }
               }
@@ -242,12 +249,14 @@ export default function App() {
                // Mark intermediate words as skipped
                for (let k = currentIndex; k < bestSkipIndex; k++) {
                   if (newWordsArray[k].status === 'pending') {
-                     newWordsArray[k].status = 'skipped';
+                     // Immutable update
+                     newWordsArray[k] = { ...newWordsArray[k], status: 'skipped' };
                   }
                }
                // Mark the anchor word as read
                if (newWordsArray[bestSkipIndex].status === 'pending') {
-                  newWordsArray[bestSkipIndex].status = 'correct'; 
+                  // Immutable update
+                  newWordsArray[bestSkipIndex] = { ...newWordsArray[bestSkipIndex], status: 'correct' }; 
                }
                currentIndex = bestSkipIndex + 1;
                changesMade = true;
