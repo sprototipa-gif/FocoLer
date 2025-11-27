@@ -5,7 +5,7 @@ import { LIBRARY, LEVELS, PREMIUM_CODE } from './constants';
 import { DifficultyLevel, IWindow, ReadingResult, WordObject, HeatmapItem } from './types';
 import { generateStory } from './services/geminiService';
 
-// --- Algoritmos Auxiliares (Mantidos os mesmos para garantir funcionalidade) ---
+// --- Algoritmos Auxiliares Ajustados (Fine Tuning) ---
 
 const getLevenshteinDistance = (a: string, b: string): number => {
   if (a.length === 0) return b.length;
@@ -31,20 +31,35 @@ const getSimilarity = (s1: string, s2: string): number => {
   return (longer.length - getLevenshteinDistance(s1, s2)) / longer.length;
 };
 
+// Mapa fonético para reduções comuns no PT-BR
+const phoneticMap: { [key: string]: string } = {
+  "ta": "esta",
+  "tava": "estava",
+  "pra": "para",
+  "pro": "para o",
+  "na": "em a",
+  "no": "em o",
+  "ce": "voce",
+  "eh": "e",
+  "um": "o", // Confusão comum em áudio
+  "uma": "a"
+};
+
 const cleanWord = (word: string): string => {
+  // Remove pontuação mas mantém a estrutura básica
   return word
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") 
-    .replace(/-/g, "") 
-    .replace(/[^a-z0-9]/g, "") 
+    .replace(/[\u0300-\u036f]/g, "") // Remove acentos
+    .replace(/[^a-z0-9]/g, "") // Remove caracteres especiais e hífens
     .trim();
 };
 
 const getMatchThreshold = (wordLength: number): number => {
-  if (wordLength <= 2) return 0.90; 
-  if (wordLength <= 4) return 0.80; 
-  return 0.65; 
+  // Tolerância maior (número menor) significa mais fácil de aceitar
+  if (wordLength <= 2) return 0.85; // Ajustado de 0.90 para aceitar melhor "e", "a", "o"
+  if (wordLength <= 4) return 0.75; // Ajustado de 0.80
+  return 0.60; // Ajustado de 0.65 para palavras longas
 };
 
 const calculateFluencyScore = (
@@ -116,7 +131,7 @@ export default function App() {
     }
   }, [currentWordIndex, isTimerRunning]);
 
-  // Speech Logic (Identical to previous optimized version)
+  // --- MOTOR DE RECONHECIMENTO DE VOZ OTIMIZADO ---
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const win = window as unknown as IWindow;
@@ -131,82 +146,150 @@ export default function App() {
         recognition.onresult = (event: any) => {
           if (!runningRef.current) return;
           const results = event.results;
-          const lastResult = results[results.length - 1];
-          const transcript = lastResult[0].transcript.toLowerCase();
-          const spokenWordsRaw = transcript.split(/\s+/);
-          const spokenWords = spokenWordsRaw.map((w: string) => cleanWord(w)).filter((w: string) => w.length > 0);
-          if (spokenWords.length === 0) return;
+          
+          // Pegamos o resultado mais recente (seja interim ou final)
+          const latestResult = results[results.length - 1];
+          if (!latestResult || !latestResult[0]) return;
 
-          const PROCESS_WINDOW = 12;
-          const batch = spokenWords.slice(-PROCESS_WINDOW); 
+          const transcript = latestResult[0].transcript.toLowerCase();
+          
+          // Limpeza do transcript: divide por espaços
+          const spokenWordsRaw = transcript.split(/\s+/).filter((w: string) => w.length > 0);
+          
+          // Janela deslizante: olha apenas as últimas N palavras faladas para evitar processar o início repetidamente
+          // Aumentado para 15 para captar frases rápidas
+          const PROCESS_WINDOW = 15; 
+          const batch = spokenWordsRaw.slice(-PROCESS_WINDOW).map((w: string) => cleanWord(w));
+          
           let currentIndex = indexRef.current;
           const allWords = wordsRef.current;
-          const LOOKAHEAD_LIMIT = 8; 
           let changesMade = false;
           let newWordsArray = [...allWords];
 
+          // Função auxiliar para verificar match
+          const checkMatch = (spoken: string, target: string): boolean => {
+            if (!spoken || !target) return false;
+            
+            // Check direto
+            const threshold = getMatchThreshold(target.length);
+            if (getSimilarity(spoken, target) >= threshold) return true;
+            
+            // Check fonético
+            if (phoneticMap[spoken] === target) return true;
+            
+            // Check contido (para casos como 'guarda-chuva' vs 'guarda')
+            if (target.includes(spoken) && spoken.length > 3) return true;
+
+            return false;
+          };
+
+          // Loop através das palavras faladas no batch
           for (let i = 0; i < batch.length; i++) {
             const spoken = batch[i];
             if (currentIndex >= allWords.length) break;
-            const targetWordClean = allWords[currentIndex].clean;
-            const targetLength = targetWordClean.length;
-            const simCurrent = getSimilarity(spoken, targetWordClean);
-            const thresholdCurrent = getMatchThreshold(targetLength);
 
-            if (simCurrent >= thresholdCurrent) {
+            const targetWord = allWords[currentIndex].clean;
+
+            // 1. Tenta match direto na palavra atual
+            if (checkMatch(spoken, targetWord)) {
               if (newWordsArray[currentIndex].status === 'pending') {
-                newWordsArray[currentIndex] = { ...newWordsArray[currentIndex], status: simCurrent > 0.9 ? 'correct' : 'near' };
+                newWordsArray[currentIndex] = { ...newWordsArray[currentIndex], status: 'correct' };
                 currentIndex++;
                 changesMade = true;
-                continue;
+                continue; // Passa para próxima palavra falada
               }
             }
+
+            // 2. Tenta match combinando duas palavras faladas (ex: "guarda" + "chuva" = "guardachuva")
             if (i + 1 < batch.length) {
               const combinedSpoken = spoken + batch[i+1];
-              const simCombined = getSimilarity(combinedSpoken, targetWordClean);
-              if (simCombined >= thresholdCurrent) {
+              if (checkMatch(combinedSpoken, targetWord)) {
                  if (newWordsArray[currentIndex].status === 'pending') {
-                    newWordsArray[currentIndex] = { ...newWordsArray[currentIndex], status: simCombined > 0.9 ? 'correct' : 'near' };
+                    newWordsArray[currentIndex] = { ...newWordsArray[currentIndex], status: 'correct' };
                     currentIndex++;
                     changesMade = true;
+                    i++; // Pula a próxima palavra falada pois já foi usada
                     continue; 
                  }
               }
             }
+
+            // 3. Lógica de Pulo (Lookahead) com ÂNCORA DUPLA
+            // Só pulamos se encontrarmos uma palavra futura E a palavra seguinte a ela também der match
+            const LOOKAHEAD_LIMIT = 8; 
+            
             let bestSkipIndex = -1;
+            
             for (let offset = 1; offset <= LOOKAHEAD_LIMIT; offset++) {
                const targetIdx = currentIndex + offset;
                if (targetIdx >= allWords.length) break;
+               
                const tWord = allWords[targetIdx].clean;
-               const sim = getSimilarity(spoken, tWord);
-               const thresh = getMatchThreshold(tWord.length);
-               if (sim >= thresh) {
-                 let confirmed = false;
+               
+               // Verifica se a palavra falada atual bate com esta palavra futura
+               if (checkMatch(spoken, tWord)) {
+                 let confirmedAnchor = false;
+                 
+                 // VERIFICAÇÃO DE ÂNCORA:
+                 // Olha se a PRÓXIMA palavra falada bate com a PRÓXIMA palavra do texto
                  const nextSpoken = i + 1 < batch.length ? batch[i + 1] : null;
-                 if (nextSpoken && targetIdx + 1 < allWords.length) {
+                 
+                 if (targetIdx + 1 < allWords.length) {
                     const nextTWord = allWords[targetIdx + 1].clean;
-                    const nextSim = getSimilarity(nextSpoken, nextTWord);
-                    if (nextSim >= getMatchThreshold(nextTWord.length)) confirmed = true;
+                    
+                    // Se tivermos uma próxima palavra falada, verificamos
+                    if (nextSpoken && checkMatch(nextSpoken, nextTWord)) {
+                        confirmedAnchor = true;
+                    }
+                 } else {
+                    // Se for a última palavra do texto, aceita sem âncora dupla se a similaridade for muito alta
+                    if (getSimilarity(spoken, tWord) > 0.9) confirmedAnchor = true;
                  }
-                 if (!confirmed && tWord.length >= 5 && sim > 0.85) confirmed = true;
-                 if (confirmed) { bestSkipIndex = targetIdx; break; }
+
+                 // Se a palavra for muito longa e única, aceita sem âncora dupla (ex: "hipopotamo")
+                 if (!confirmedAnchor && tWord.length >= 7 && getSimilarity(spoken, tWord) > 0.9) {
+                    confirmedAnchor = true;
+                 }
+
+                 if (confirmedAnchor) {
+                    bestSkipIndex = targetIdx;
+                    break; // Encontrou um pulo válido, para de procurar
+                 }
                }
             }
+
+            // Se confirmamos um pulo válido
             if (bestSkipIndex !== -1) {
+               // Marca as intermediárias como 'skipped'
                for (let k = currentIndex; k < bestSkipIndex; k++) {
-                  if (newWordsArray[k].status === 'pending') newWordsArray[k] = { ...newWordsArray[k], status: 'skipped' };
+                  if (newWordsArray[k].status === 'pending') {
+                      newWordsArray[k] = { ...newWordsArray[k], status: 'skipped' };
+                  }
                }
-               if (newWordsArray[bestSkipIndex].status === 'pending') newWordsArray[bestSkipIndex] = { ...newWordsArray[bestSkipIndex], status: 'correct' }; 
+               // Marca a encontrada como 'correct'
+               if (newWordsArray[bestSkipIndex].status === 'pending') {
+                   newWordsArray[bestSkipIndex] = { ...newWordsArray[bestSkipIndex], status: 'correct' }; 
+               }
+               
                currentIndex = bestSkipIndex + 1;
                changesMade = true;
             }
           }
+
           if (changesMade) {
              setWordsArray(newWordsArray);
              setCurrentWordIndex(currentIndex);
           }
         };
-        recognition.onend = () => { if (runningRef.current) try { recognition.start(); } catch (e) {} };
+
+        recognition.onend = () => { 
+            // Reinicia automaticamente se ainda estiver rodando (fix para Chrome que para após um tempo)
+            if (runningRef.current) {
+                try { recognition.start(); } catch (e) {
+                    // Ignora erro se já estiver rodando
+                } 
+            }
+        };
         recognitionRef.current = recognition;
       }
     }
@@ -256,7 +339,13 @@ export default function App() {
     setIsTimerRunning(true);
     setIsListening(true);
     runningRef.current = true;
-    if (recognitionRef.current) try { recognitionRef.current.start(); } catch (e) {}
+    if (recognitionRef.current) {
+        try { 
+            recognitionRef.current.start(); 
+        } catch (e) {
+            console.log("Recognition already started or error:", e);
+        }
+    }
   };
 
   const stopListening = () => {
