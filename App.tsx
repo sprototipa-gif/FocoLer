@@ -583,7 +583,7 @@ export default function App() {
 
       {/* Leveling CTA - Only for Premium */}
       {isPremium && (
-        <Card onClick={() => { setSelectedCategory('Nivelamento'); startReading(LIBRARY['Nivelamento'].texts['medio'][0]); }} 
+        <Card onClick={() => { setSelectedCategory('Nivelamento'); startReading(LIBRARY['Nivelamento'].texts[selectedLevel][0]); }} 
           className="p-4 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white cursor-pointer hover:shadow-lg transition-all active:scale-95 relative overflow-hidden">
           <div className="absolute right-0 top-0 opacity-10 transform translate-x-2 -translate-y-2">
               <Award className="w-24 h-24" />
@@ -729,7 +729,12 @@ export default function App() {
         <h2 className="font-bold text-slate-800 text-lg">Texto Personalizado</h2>
       </div>
       <div className="flex-1 bg-white border-2 border-slate-200 rounded-2xl p-4 mb-4 focus-within:border-indigo-500">
-        <textarea className="w-full h-full resize-none outline-none text-lg text-slate-700" placeholder="Cole o texto aqui..." value={customTextInput} onChange={(e) => setCustomTextInput(e.target.value)} />
+        <textarea 
+          className="w-full h-full resize-none outline-none text-lg text-slate-700" 
+          placeholder="Cole aqui textos diversos, trechos de livros ou materiais de aula para avaliar a fluência..." 
+          value={customTextInput} 
+          onChange={(e) => setCustomTextInput(e.target.value)} 
+        />
       </div>
       <Button disabled={!customTextInput.trim()} onClick={() => { setSelectedCategory("Texto Personalizado"); startReading(customTextInput); }} className="w-full py-4">Iniciar</Button>
     </div>

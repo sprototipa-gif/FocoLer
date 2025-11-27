@@ -11,13 +11,13 @@ export const LIBRARY: LibraryData = {
     color: "bg-slate-200 text-slate-700",
     texts: {
       facil: [
-        "O menino joga bola no parque. O sol brilha forte no céu azul. A menina come uma maçã vermelha. O cachorro corre atrás do gato. A escola é grande e bonita. Eu gosto de ler livros. A chuva molha a terra. O passarinho canta na janela. Minha bicicleta é muito rápida. O bolo de chocolate é gostoso."
+        "O gato pulou no muro alto. O rato correu rápido para o buraco. O dia estava muito bonito e quente. O sol brilhava forte no céu azul. A menina jogou a bola para o alto. O menino chutou a bola no gol. Todos ficaram felizes com o jogo."
       ],
       medio: [
-        "O menino joga bola no parque. O sol brilha forte no céu azul. A menina come uma maçã vermelha. O cachorro corre atrás do gato. A escola é grande e bonita. Eu gosto de ler livros. A chuva molha a terra. O passarinho canta na janela. Minha bicicleta é muito rápida. O bolo de chocolate é gostoso."
+        "A escola é um lugar muito divertido onde aprendemos coisas novas todos os dias. Na hora do recreio, gosto de brincar de pega-pega com meus amigos no pátio. Minha professora conta histórias incríveis sobre animais da floresta e planetas distantes. Eu adoro ler livros na biblioteca."
       ],
       dificil: [
-        "O menino joga bola no parque. O sol brilha forte no céu azul. A menina come uma maçã vermelha. O cachorro corre atrás do gato. A escola é grande e bonita. Eu gosto de ler livros. A chuva molha a terra. O passarinho canta na janela. Minha bicicleta é muito rápida. O bolo de chocolate é gostoso."
+        "A preservação do meio ambiente é fundamental para a sobrevivência de todas as espécies no planeta Terra. As florestas ajudam a regular o clima e fornecem oxigênio limpo, enquanto os oceanos abrigam uma imensa biodiversidade marinha. É dever de todos nós adotar práticas sustentáveis, como reciclar o lixo e economizar água, para garantir um futuro saudável para as próximas gerações."
       ]
     }
   },
