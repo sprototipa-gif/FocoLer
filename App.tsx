@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BookOpen, Mic, Play, RotateCcw, Award, BarChart2, CheckCircle, Wand2, MicOff, AlertCircle, ArrowLeft, Download, Clock, PieChart, Activity, Eye, Edit, Volume2, StopCircle, ChevronRight, X, Lock, Key, Crown } from 'lucide-react';
+import { BookOpen, Mic, Play, RotateCcw, Award, BarChart2, CheckCircle, Wand2, MicOff, AlertCircle, ArrowLeft, Download, Clock, PieChart, Activity, Eye, Edit, Volume2, StopCircle, ChevronRight, X, Lock, Key, Crown, Zap, Brain, Layout, Sparkles } from 'lucide-react';
 import { Button, Card } from './components/UI';
 import { LIBRARY, LEVELS, ACCESS_CODE, PREMIUM_CODE } from './constants';
 import { DifficultyLevel, IWindow, ReadingResult, WordObject, HeatmapItem } from './types';
@@ -74,6 +74,7 @@ const calculateFluencyScore = (
 
 export default function App() {
   // Views
+  const [showLanding, setShowLanding] = useState(true);
   const [view, setView] = useState<'home' | 'text_selection' | 'reading' | 'results' | 'generating' | 'custom_text'>('home');
   
   // Access Control & Tiers
@@ -441,8 +442,71 @@ export default function App() {
 
   // --- Views ---
 
+  const renderLandingPage = () => (
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-indigo-100 flex flex-col">
+      {/* Hero Section */}
+      <div className="bg-white pb-12 pt-8 px-6 rounded-b-[3rem] shadow-xl border-b border-slate-100 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50 rounded-full opacity-50 blur-3xl transform translate-x-20 -translate-y-20"></div>
+        <div className="absolute bottom-0 left-0 w-40 h-40 bg-purple-50 rounded-full opacity-50 blur-2xl transform -translate-x-10 translate-y-10"></div>
+        
+        <div className="max-w-4xl mx-auto text-center relative z-10">
+          <div className="inline-flex items-center gap-2 bg-indigo-50 px-4 py-2 rounded-full mb-6 border border-indigo-100 shadow-sm">
+            <Sparkles className="w-4 h-4 text-indigo-500 fill-indigo-500" />
+            <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide">Inteligência Artificial</span>
+          </div>
+          <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight text-slate-900 mb-6">
+            Foco<span className="text-indigo-600">Ler</span>
+          </h1>
+          <p className="text-lg text-slate-600 mb-8 max-w-xl mx-auto leading-relaxed">
+            A ferramenta definitiva para avaliação e desenvolvimento da <strong className="text-indigo-600">fluência leitora</strong>. Tecnologia avançada para transformar a educação.
+          </p>
+          <Button 
+            onClick={() => setShowLanding(false)} 
+            className="w-full md:w-auto text-lg px-10 py-4 shadow-indigo-300 shadow-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 transform hover:-translate-y-1 transition-all"
+          >
+            Acessar Aplicação
+          </Button>
+        </div>
+      </div>
+
+      {/* Features */}
+      <div className="flex-1 max-w-4xl mx-auto px-6 py-12 grid md:grid-cols-3 gap-6">
+        <Card className="p-6 border-transparent shadow-md hover:shadow-xl transition-all duration-300 bg-white group">
+          <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+            <Mic className="w-6 h-6 text-blue-600" />
+          </div>
+          <h3 className="font-bold text-lg text-slate-800 mb-2">Reconhecimento de Voz</h3>
+          <p className="text-sm text-slate-500 leading-relaxed">Algoritmo de alta precisão calibrado para a fala infantil, detectando ritmo e precisão palavra por palavra.</p>
+        </Card>
+
+        <Card className="p-6 border-transparent shadow-md hover:shadow-xl transition-all duration-300 bg-white group">
+          <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+            <Activity className="w-6 h-6 text-emerald-600" />
+          </div>
+          <h3 className="font-bold text-lg text-slate-800 mb-2">Métricas em Tempo Real</h3>
+          <p className="text-sm text-slate-500 leading-relaxed">Calcula automaticamente PPM (Palavras Por Minuto) e precisão, gerando mapas de calor instantâneos.</p>
+        </Card>
+
+        <Card className="p-6 border-transparent shadow-md hover:shadow-xl transition-all duration-300 bg-white group">
+          <div className="w-12 h-12 bg-amber-100 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+            <Layout className="w-6 h-6 text-amber-600" />
+          </div>
+          <h3 className="font-bold text-lg text-slate-800 mb-2">Simplicidade Total</h3>
+          <p className="text-sm text-slate-500 leading-relaxed">Interface limpa e amigável. Funciona direto no navegador, sem necessidade de instalações complexas.</p>
+        </Card>
+      </div>
+
+      <div className="text-center pb-8 pt-4">
+        <p className="text-slate-400 text-xs font-medium">© 2025 FocoLer Educacional</p>
+      </div>
+    </div>
+  );
+
   const renderGatekeeper = () => (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 animate-fade-in">
+      <div onClick={() => setShowLanding(true)} className="absolute top-6 left-6 cursor-pointer text-slate-400 hover:text-indigo-600 transition-colors flex items-center gap-2">
+        <ArrowLeft className="w-5 h-5" /> <span className="text-sm font-bold">Voltar</span>
+      </div>
       <Card className="p-8 w-full max-w-sm text-center space-y-6 shadow-xl">
         <div className="flex justify-center mb-4">
           <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center">
@@ -774,6 +838,10 @@ export default function App() {
       </div>
     );
   };
+
+  if (showLanding) {
+    return renderLandingPage();
+  }
 
   if (isLocked) {
     return renderGatekeeper();
