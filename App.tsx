@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BookOpen, Mic, Play, RotateCcw, Award, BarChart2, CheckCircle, Wand2, MicOff, AlertCircle, ArrowLeft, Download, Clock, PieChart, Activity, Eye, Edit, Volume2, StopCircle, ChevronRight, X, Lock, Key, Crown, Zap, Brain, Layout, Sparkles, CheckSquare, UserCheck, MessageSquare, Star, Smile, Heart, Info } from 'lucide-react';
+import { BookOpen, Mic, Play, RotateCcw, Award, BarChart2, CheckCircle, MicOff, AlertCircle, ArrowLeft, Download, Clock, PieChart, Activity, Eye, Edit, Volume2, StopCircle, ChevronRight, X, Lock, Key, Crown, Zap, Brain, Layout, Sparkles, CheckSquare, UserCheck, MessageSquare, Star, Smile, Heart, Info } from 'lucide-react';
 import { Button, Card } from './components/UI';
-import { LIBRARY, LEVELS, PREMIUM_CODE } from './constants';
+import { LIBRARY, LEVELS, PREMIUM_CODE, DIRECTOR_CODE } from './constants';
 import { DifficultyLevel, IWindow, ReadingResult, WordObject, HeatmapItem } from './types';
-import { generateStory } from './services/geminiService';
 
 // --- Algoritmos Auxiliares Ajustados (Fine Tuning) ---
 
@@ -41,12 +40,11 @@ const phoneticMap: { [key: string]: string } = {
   "no": "em o",
   "ce": "voce",
   "eh": "e",
-  "um": "o", // Confusão comum em áudio
+  "um": "o", 
   "uma": "a"
 };
 
 const cleanWord = (word: string): string => {
-  // Remove pontuação mas mantém a estrutura básica
   return word
     .toLowerCase()
     .normalize("NFD")
@@ -56,10 +54,9 @@ const cleanWord = (word: string): string => {
 };
 
 const getMatchThreshold = (wordLength: number): number => {
-  // Tolerância maior (número menor) significa mais fácil de aceitar
-  if (wordLength <= 2) return 0.85; // Ajustado de 0.90 para aceitar melhor "e", "a", "o"
-  if (wordLength <= 4) return 0.75; // Ajustado de 0.80
-  return 0.60; // Ajustado de 0.65 para palavras longas
+  if (wordLength <= 2) return 0.85; 
+  if (wordLength <= 4) return 0.75; 
+  return 0.60; 
 };
 
 const calculateFluencyScore = (
@@ -88,8 +85,8 @@ const calculateFluencyScore = (
 export default function App() {
   // Views & States
   const [showLanding, setShowLanding] = useState(true);
-  const [view, setView] = useState<'home' | 'text_selection' | 'reading' | 'results' | 'generating' | 'custom_text'>('home');
-  const [isPremium, setIsPremium] = useState(false);
+  const [view, setView] = useState<'home' | 'text_selection' | 'reading' | 'results' | 'custom_text'>('home');
+  const [accessLevel, setAccessLevel] = useState<'demo' | 'director' | 'premium'>('demo');
   const [showPremiumInput, setShowPremiumInput] = useState(false);
   const [premiumInput, setPremiumInput] = useState('');
   const [premiumError, setPremiumError] = useState(false);
@@ -117,8 +114,8 @@ export default function App() {
 
   // Init
   useEffect(() => {
-    const savedTier = localStorage.getItem('focoler_tier');
-    if (savedTier === 'premium') setIsPremium(true);
+    const savedLevel = localStorage.getItem('focoler_access_level');
+    if (savedLevel === 'premium' || savedLevel === 'director') setAccessLevel(savedLevel);
   }, []);
 
   useEffect(() => { wordsRef.current = wordsArray; }, [wordsArray]);
@@ -131,7 +128,7 @@ export default function App() {
     }
   }, [currentWordIndex, isTimerRunning]);
 
-  // --- MOTOR DE RECONHECIMENTO DE VOZ OTIMIZADO ---
+  // --- MOTOR DE RECONHECIMENTO DE VOZ OTIMIZADO (SEARCH & CONFIRM) ---
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const win = window as unknown as IWindow;
@@ -147,18 +144,15 @@ export default function App() {
           if (!runningRef.current) return;
           const results = event.results;
           
-          // Pegamos o resultado mais recente (seja interim ou final)
           const latestResult = results[results.length - 1];
           if (!latestResult || !latestResult[0]) return;
 
           const transcript = latestResult[0].transcript.toLowerCase();
           
-          // Limpeza do transcript: divide por espaços
           const spokenWordsRaw = transcript.split(/\s+/).filter((w: string) => w.length > 0);
           
-          // Janela deslizante: olha apenas as últimas N palavras faladas para evitar processar o início repetidamente
-          // Aumentado para 15 para captar frases rápidas
-          const PROCESS_WINDOW = 15; 
+          // "Search" Logic: Look through the last N spoken words
+          const PROCESS_WINDOW = 20; 
           const batch = spokenWordsRaw.slice(-PROCESS_WINDOW).map((w: string) => cleanWord(w));
           
           let currentIndex = indexRef.current;
@@ -166,111 +160,60 @@ export default function App() {
           let changesMade = false;
           let newWordsArray = [...allWords];
 
-          // Função auxiliar para verificar match
           const checkMatch = (spoken: string, target: string): boolean => {
             if (!spoken || !target) return false;
-            
-            // Check direto
             const threshold = getMatchThreshold(target.length);
             if (getSimilarity(spoken, target) >= threshold) return true;
-            
-            // Check fonético
             if (phoneticMap[spoken] === target) return true;
-            
-            // Check contido (para casos como 'guarda-chuva' vs 'guarda')
             if (target.includes(spoken) && spoken.length > 3) return true;
-
             return false;
           };
 
-          // Loop através das palavras faladas no batch
+          // Iterate through spoken batch
           for (let i = 0; i < batch.length; i++) {
             const spoken = batch[i];
             if (currentIndex >= allWords.length) break;
 
-            const targetWord = allWords[currentIndex].clean;
-
-            // 1. Tenta match direto na palavra atual
-            if (checkMatch(spoken, targetWord)) {
-              if (newWordsArray[currentIndex].status === 'pending') {
-                newWordsArray[currentIndex] = { ...newWordsArray[currentIndex], status: 'correct' };
-                currentIndex++;
-                changesMade = true;
-                continue; // Passa para próxima palavra falada
-              }
-            }
-
-            // 2. Tenta match combinando duas palavras faladas (ex: "guarda" + "chuva" = "guardachuva")
-            if (i + 1 < batch.length) {
-              const combinedSpoken = spoken + batch[i+1];
-              if (checkMatch(combinedSpoken, targetWord)) {
-                 if (newWordsArray[currentIndex].status === 'pending') {
-                    newWordsArray[currentIndex] = { ...newWordsArray[currentIndex], status: 'correct' };
-                    currentIndex++;
-                    changesMade = true;
-                    i++; // Pula a próxima palavra falada pois já foi usada
-                    continue; 
-                 }
-              }
-            }
-
-            // 3. Lógica de Pulo (Lookahead) com ÂNCORA DUPLA
-            // Só pulamos se encontrarmos uma palavra futura E a palavra seguinte a ela também der match
-            const LOOKAHEAD_LIMIT = 8; 
+            // LOOKAHEAD SEARCH
+            // Instead of just checking currentIndex, check the next few words
+            // If we find a match ahead, it means the user read it correctly.
+            // We do NOT mark skipped words here (Late Validation).
             
-            let bestSkipIndex = -1;
+            const LOOKAHEAD_LIMIT = 12; // Allow finding words up to 12 steps ahead
             
-            for (let offset = 1; offset <= LOOKAHEAD_LIMIT; offset++) {
-               const targetIdx = currentIndex + offset;
-               if (targetIdx >= allWords.length) break;
-               
-               const tWord = allWords[targetIdx].clean;
-               
-               // Verifica se a palavra falada atual bate com esta palavra futura
-               if (checkMatch(spoken, tWord)) {
-                 let confirmedAnchor = false;
-                 
-                 // VERIFICAÇÃO DE ÂNCORA:
-                 // Olha se a PRÓXIMA palavra falada bate com a PRÓXIMA palavra do texto
-                 const nextSpoken = i + 1 < batch.length ? batch[i + 1] : null;
-                 
-                 if (targetIdx + 1 < allWords.length) {
-                    const nextTWord = allWords[targetIdx + 1].clean;
-                    
-                    // Se tivermos uma próxima palavra falada, verificamos
-                    if (nextSpoken && checkMatch(nextSpoken, nextTWord)) {
-                        confirmedAnchor = true;
+            for (let offset = 0; offset < LOOKAHEAD_LIMIT; offset++) {
+                const targetIdx = currentIndex + offset;
+                if (targetIdx >= allWords.length) break;
+                
+                const targetWord = allWords[targetIdx].clean;
+                
+                // Check single word match
+                let matchFound = checkMatch(spoken, targetWord);
+                
+                // Check combined match (two spoken words = one target)
+                if (!matchFound && i + 1 < batch.length) {
+                    const combined = spoken + batch[i+1];
+                    if (checkMatch(combined, targetWord)) {
+                        matchFound = true;
+                        i++; // Consume next spoken word
                     }
-                 } else {
-                    // Se for a última palavra do texto, aceita sem âncora dupla se a similaridade for muito alta
-                    if (getSimilarity(spoken, tWord) > 0.9) confirmedAnchor = true;
-                 }
+                }
 
-                 // Se a palavra for muito longa e única, aceita sem âncora dupla (ex: "hipopotamo")
-                 if (!confirmedAnchor && tWord.length >= 7 && getSimilarity(spoken, tWord) > 0.9) {
-                    confirmedAnchor = true;
-                 }
-
-                 if (confirmedAnchor) {
-                    bestSkipIndex = targetIdx;
-                    break; // Encontrou um pulo válido, para de procurar
-                 }
-               }
-            }
-
-            // Se confirmamos um pulo válido
-            if (bestSkipIndex !== -1) {
-               // Marca as intermediárias como 'skipped' APENAS NO FINAL
-               // Por enquanto, apenas pulamos o indice. O finishReading vai marcar como skipped
-               // Mas para UX, vamos manter o status 'pending' para não distrair
-               
-               // Marca a encontrada como 'correct'
-               if (newWordsArray[bestSkipIndex].status === 'pending') {
-                   newWordsArray[bestSkipIndex] = { ...newWordsArray[bestSkipIndex], status: 'correct' }; 
-               }
-               
-               currentIndex = bestSkipIndex + 1;
-               changesMade = true;
+                if (matchFound) {
+                    // Only mark if pending. Don't overwrite existing status.
+                    if (newWordsArray[targetIdx].status === 'pending') {
+                        newWordsArray[targetIdx] = { ...newWordsArray[targetIdx], status: 'correct' };
+                        
+                        // Update current index to be one after the found word
+                        // This moves the "blue cursor" forward
+                        if (targetIdx >= currentIndex) {
+                            currentIndex = targetIdx + 1;
+                        }
+                        changesMade = true;
+                    }
+                    // Break inner loop to process next spoken word
+                    break; 
+                }
             }
           }
 
@@ -281,11 +224,8 @@ export default function App() {
         };
 
         recognition.onend = () => { 
-            // Reinicia automaticamente se ainda estiver rodando (fix para Chrome que para após um tempo)
             if (runningRef.current) {
-                try { recognition.start(); } catch (e) {
-                    // Ignora erro se já estiver rodando
-                } 
+                try { recognition.start(); } catch (e) {} 
             }
         };
         recognitionRef.current = recognition;
@@ -303,14 +243,20 @@ export default function App() {
   }, [isTimerRunning]);
 
   useEffect(() => {
-    if (wordsArray.length > 0 && currentWordIndex >= wordsArray.length && isTimerRunning) finishReading();
+    // Auto-finish if all words are processed (optional, usually manual stop is better for pacing)
+    // if (wordsArray.length > 0 && currentWordIndex >= wordsArray.length && isTimerRunning) finishReading();
   }, [currentWordIndex, wordsArray, isTimerRunning]);
 
   // Actions
   const handlePremiumUnlock = () => {
     if (premiumInput === PREMIUM_CODE) {
-      localStorage.setItem('focoler_tier', 'premium');
-      setIsPremium(true);
+      localStorage.setItem('focoler_access_level', 'premium');
+      setAccessLevel('premium');
+      setShowPremiumInput(false);
+      setPremiumError(false);
+    } else if (premiumInput === DIRECTOR_CODE) {
+      localStorage.setItem('focoler_access_level', 'director');
+      setAccessLevel('director');
       setShowPremiumInput(false);
       setPremiumError(false);
     } else {
@@ -374,9 +320,10 @@ export default function App() {
   const finishReading = () => {
     stopListening();
     
-    // Late Validation: Mark skipped words
+    // Late Validation: Calculate Skips
     const finalWords = [...wordsArray];
-    // Encontra o último índice que foi marcado como correto
+    
+    // Find the last word marked as correct
     let lastCorrectIndex = -1;
     for (let i = finalWords.length - 1; i >= 0; i--) {
         if (finalWords[i].status === 'correct') {
@@ -385,7 +332,7 @@ export default function App() {
         }
     }
 
-    // Marca todos os pendentes ANTES do último correto como 'skipped'
+    // Mark everything pending before the last correct word as skipped
     if (lastCorrectIndex !== -1) {
         for (let i = 0; i < lastCorrectIndex; i++) {
             if (finalWords[i].status === 'pending') {
@@ -394,16 +341,13 @@ export default function App() {
         }
     }
     
-    // Atualiza o estado para refletir os skips no relatório
     setWordsArray(finalWords);
 
     const correctWords = finalWords.filter(w => w.status === 'correct').length;
-    const nearWords = finalWords.filter(w => w.status === 'near').length;
-    const validWords = correctWords + nearWords;
+    // Approximates not used in this simplified client-side logic, treated as correct or ignored
     const processedWords = finalWords.filter(w => w.status !== 'pending').length;
     
-    // PPM é baseado nas palavras processadas no tempo decorrido, mas ajustado pela precisão
-    const { nota, classificacao, ppm } = calculateFluencyScore(processedWords > 0 ? processedWords : validWords, validWords, timeElapsed);
+    const { nota, classificacao, ppm } = calculateFluencyScore(processedWords > 0 ? processedWords : correctWords, correctWords, timeElapsed);
     
     let profile = LEVELS.PRE_LEITOR;
     if (ppm >= LEVELS.FLUENTE.minPPM) profile = LEVELS.FLUENTE;
@@ -411,18 +355,17 @@ export default function App() {
     
     const heatmap: HeatmapItem[] = finalWords.map(w => ({ word: w.original, status: w.status }));
     const result: ReadingResult = {
-      ppm, time: timeElapsed, words: validWords, totalWords: finalWords.length,
+      ppm, time: timeElapsed, words: correctWords, totalWords: finalWords.length,
       profile, date: new Date().toLocaleDateString('pt-BR'), fluencyScore: nota, classification: classificacao, heatmap
     };
     setResultData(result);
     setView('results');
   };
 
-  // --- Styled Components Logic ---
+  // --- UI Components ---
 
   const renderLandingPage = () => (
     <div className="min-h-screen bg-gradient-to-b from-sky-50 via-white to-violet-50 font-sans text-slate-800 selection:bg-violet-200 flex flex-col">
-      {/* Navbar Simple */}
       <nav className="p-6 flex justify-between items-center max-w-6xl mx-auto w-full">
         <div className="flex items-center gap-2">
           <div className="w-10 h-10 bg-violet-600 rounded-2xl flex items-center justify-center rotate-3 shadow-lg shadow-violet-200">
@@ -435,9 +378,7 @@ export default function App() {
         </Button>
       </nav>
 
-      {/* Hero Section */}
       <div className="flex-1 flex flex-col justify-center items-center px-6 relative overflow-hidden pb-12">
-        {/* Background Blobs */}
         <div className="absolute top-20 left-10 w-72 h-72 bg-amber-100 rounded-full mix-blend-multiply filter blur-3xl opacity-60 animate-float"></div>
         <div className="absolute top-20 right-10 w-72 h-72 bg-violet-100 rounded-full mix-blend-multiply filter blur-3xl opacity-60 animate-float" style={{ animationDelay: '2s' }}></div>
         <div className="absolute -bottom-20 left-1/2 w-96 h-96 bg-sky-100 rounded-full mix-blend-multiply filter blur-3xl opacity-60 animate-float" style={{ animationDelay: '4s' }}></div>
@@ -469,7 +410,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Cards Section */}
       <div className="bg-white py-20 px-6 rounded-t-[3rem] shadow-[0_-20px_60px_-15px_rgba(0,0,0,0.05)] relative z-20">
         <div className="max-w-6xl mx-auto">
           <div className="grid md:grid-cols-3 gap-8">
@@ -496,13 +436,10 @@ export default function App() {
             </div>
           </div>
 
-          {/* Guide */}
           <div className="mt-24">
             <h2 className="font-display font-bold text-3xl text-center text-slate-800 mb-12">Como Funciona?</h2>
             <div className="flex flex-col md:flex-row justify-between items-center gap-8 relative">
-              {/* Connector Line (Desktop) */}
               <div className="hidden md:block absolute top-1/2 left-0 w-full h-1 bg-slate-100 -z-10 transform -translate-y-1/2 rounded-full"></div>
-              
               {[
                 {step: 1, title: "Escolha o Nível", icon: <BarChart2 className="w-5 h-5 text-white"/>, color: "bg-sky-500"},
                 {step: 2, title: "Selecione a História", icon: <BookOpen className="w-5 h-5 text-white"/>, color: "bg-violet-500"},
@@ -532,7 +469,7 @@ export default function App() {
       <div className="text-center relative">
           <h1 className="font-display font-extrabold text-4xl text-violet-600 tracking-tight drop-shadow-sm">FocoLer</h1>
           <p className="text-slate-500 font-medium mt-1">Treinador de Fluência Leitora</p>
-          {isPremium && <div className="absolute top-0 right-0 flex flex-col items-center animate-pulse-soft"><Crown className="w-6 h-6 text-amber-400 fill-amber-400" /><span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">PRO</span></div>}
+          {accessLevel !== 'demo' && <div className="absolute top-0 right-0 flex flex-col items-center animate-pulse-soft"><Crown className="w-6 h-6 text-amber-400 fill-amber-400" /><span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">{accessLevel === 'premium' ? 'PRO' : 'DIR'}</span></div>}
       </div>
 
       <div className="bg-white p-6 rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 relative overflow-hidden">
@@ -558,17 +495,16 @@ export default function App() {
           ))}
         </div>
         
-        {!isPremium && (
+        {accessLevel === 'demo' && (
           <button 
             onClick={() => setShowPremiumInput(true)}
             className="w-full mt-4 py-2 rounded-xl border border-dashed border-amber-300 bg-amber-50 text-amber-700 text-xs font-bold flex items-center justify-center gap-2 hover:bg-amber-100 transition-colors"
           >
-            <Crown className="w-3 h-3" /> Desbloquear Versão Premium
+            <Crown className="w-3 h-3" /> Desbloquear Versão Completa
           </button>
         )}
       </div>
 
-      {/* Premium Input Dialog */}
       {showPremiumInput && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-fade-in">
           <Card className="p-8 w-full max-w-sm space-y-6 relative bg-white rounded-3xl shadow-2xl">
@@ -577,18 +513,18 @@ export default function App() {
               <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mb-4 shadow-inner">
                 <Crown className="w-8 h-8 text-amber-500 fill-amber-500" />
               </div>
-              <h3 className="font-display font-bold text-2xl text-slate-800">Seja Premium</h3>
-              <p className="text-sm text-slate-500 mt-2 leading-relaxed">Libere o simulado oficial, teste de nivelamento e editor de textos.</p>
+              <h3 className="font-display font-bold text-2xl text-slate-800">Acesso Restrito</h3>
+              <p className="text-sm text-slate-500 mt-2 leading-relaxed">Digite seu código de acesso para liberar mais conteúdos.</p>
               
               <div className="w-full space-y-4 mt-4">
                 <input 
                   type="text" 
                   value={premiumInput}
                   onChange={(e) => { setPremiumInput(e.target.value); setPremiumError(false); }}
-                  placeholder="Digite o código de acesso"
+                  placeholder="Código de acesso"
                   className={`w-full px-5 py-3 border-2 rounded-xl outline-none font-bold text-center text-lg transition-all ${premiumError ? 'border-red-300 bg-red-50 text-red-500' : 'border-slate-100 bg-slate-50 focus:border-amber-400 focus:bg-white'}`}
                 />
-                {premiumError && <p className="text-red-500 text-xs font-bold bg-red-50 py-1 px-3 rounded-full inline-block">Código incorreto</p>}
+                {premiumError && <p className="text-red-500 text-xs font-bold bg-red-50 py-1 px-3 rounded-full inline-block">Código inválido</p>}
                 <Button onClick={handlePremiumUnlock} className="w-full py-4 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-white shadow-amber-200 rounded-xl shadow-lg">Confirmar</Button>
               </div>
             </div>
@@ -596,8 +532,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Leveling CTA */}
-      {isPremium && (
+      {accessLevel === 'premium' && (
         <div onClick={() => { setSelectedCategory('Nivelamento'); startReading(LIBRARY['Nivelamento'].texts[selectedLevel][0]); }} 
           className="group relative p-6 bg-gradient-to-r from-fuchsia-600 to-purple-600 rounded-3xl text-white cursor-pointer shadow-xl shadow-fuchsia-200 transition-all hover:scale-[1.02] overflow-hidden">
           <div className="absolute right-0 top-0 opacity-10 transform translate-x-4 -translate-y-4 group-hover:rotate-12 transition-transform duration-500">
@@ -618,7 +553,7 @@ export default function App() {
         {Object.entries(LIBRARY)
           .filter(([k]) => {
             if (k === 'Nivelamento') return false;
-            if (k === 'Simulado' && !isPremium) return false;
+            if (k === 'Simulado' && accessLevel !== 'premium') return false;
             return true;
           })
           .map(([name, data]) => (
@@ -634,7 +569,7 @@ export default function App() {
         ))}
       </div>
 
-      {isPremium && (
+      {accessLevel === 'premium' && (
         <div className="fixed bottom-6 left-0 right-0 px-6 max-w-lg mx-auto pointer-events-none">
           <Button variant="secondary" className="w-full py-4 rounded-2xl shadow-xl shadow-slate-200 pointer-events-auto bg-white/90 backdrop-blur-md border-violet-200 text-violet-700 hover:bg-violet-50" onClick={() => { setCustomTextInput(''); setView('custom_text'); }}>
             <Edit className="w-5 h-5" /> Colar Texto Próprio
@@ -719,7 +654,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Análise Pedagógica Box */}
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-left shadow-sm">
             <h3 className="font-display font-bold text-slate-700 mb-2 flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-violet-500" /> Análise Pedagógica
@@ -781,7 +715,12 @@ export default function App() {
   const renderTextSelection = () => {
     if (!selectedCategory || !LIBRARY[selectedCategory]) return null;
     const allTexts = LIBRARY[selectedCategory].texts[selectedLevel];
-    const texts = isPremium ? allTexts : allTexts.slice(0, 1);
+    
+    // Access Level Logic
+    let textsToDisplay = allTexts;
+    if (accessLevel === 'demo') textsToDisplay = allTexts.slice(0, 1);
+    else if (accessLevel === 'director') textsToDisplay = allTexts.slice(0, 5);
+    // Premium sees all
 
     return (
       <div className="space-y-6 animate-fade-in pt-4 w-full px-2">
@@ -792,14 +731,14 @@ export default function App() {
             <p className="text-xs text-slate-400 font-bold uppercase tracking-wide">Nível {selectedLevel}</p>
           </div>
         </div>
-        {!isPremium && (
+        {accessLevel === 'demo' && (
           <div className="bg-amber-50 text-amber-800 p-4 rounded-2xl text-sm flex items-start gap-3 border border-amber-100">
             <Lock className="w-5 h-5 flex-shrink-0 mt-0.5" />
-            <span className="font-medium leading-tight">Modo Demonstração: Apenas 1 texto liberado. <span className="underline cursor-pointer font-bold hover:text-amber-600" onClick={() => { setView('home'); setShowPremiumInput(true); }}>Seja Premium</span> para acesso total.</span>
+            <span className="font-medium leading-tight">Modo Demonstração: Apenas 1 texto liberado. <span className="underline cursor-pointer font-bold hover:text-amber-600" onClick={() => { setView('home'); setShowPremiumInput(true); }}>Desbloquear</span> para mais.</span>
           </div>
         )}
         <div className="grid gap-4 pb-24">
-          {texts.map((text, index) => (
+          {textsToDisplay.map((text, index) => (
             <div key={index} onClick={() => startReading(text)} className="group bg-white p-6 rounded-3xl border border-slate-100 cursor-pointer hover:border-violet-200 hover:shadow-lg transition-all active:scale-[0.98] relative overflow-hidden">
               <div className="absolute top-0 right-0 w-16 h-16 bg-slate-50 rounded-bl-full -mr-8 -mt-8 group-hover:bg-violet-50 transition-colors"></div>
               <div className="flex gap-4">
@@ -861,11 +800,9 @@ export default function App() {
               else if (item.status === 'correct') {
                 statusClass += " bg-emerald-100 text-emerald-800";
               }
-              else if (item.status === 'near') {
-                statusClass += " bg-amber-100 text-amber-800";
-              }
               else if (item.status === 'skipped') {
-                statusClass += " bg-red-50 text-red-300 decoration-red-300 line-through decoration-2";
+                // Pending logic hides skips until the end
+                statusClass += " text-slate-700"; 
               }
               else if (item.status === 'pending') {
                 statusClass += " text-slate-700";
@@ -903,12 +840,6 @@ export default function App() {
           {view === 'custom_text' && renderCustomText()}
           {view === 'reading' && renderReading()}
           {view === 'results' && renderResults()}
-          {view === 'generating' && (
-            <div className="flex flex-col items-center justify-center h-full pt-40 animate-fade-in">
-              <div className="w-20 h-20 bg-violet-100 rounded-full flex items-center justify-center animate-spin mb-6"><Wand2 className="w-10 h-10 text-violet-600"/></div>
-              <h2 className="font-display font-bold text-xl text-slate-700">Criando sua história mágica...</h2>
-            </div>
-          )}
         </div>
       </div>
     </div>

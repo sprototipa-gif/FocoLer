@@ -4,6 +4,7 @@ import { LibraryData, ReadingProfile } from './types';
 
 export const ACCESS_CODE = "focoler2025";
 export const PREMIUM_CODE = "focolerpro2025";
+export const DIRECTOR_CODE = "carlosdiretoria";
 
 export const LIBRARY: LibraryData = {
   "Nivelamento": {
