@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BookOpen, Mic, Play, RotateCcw, Award, BarChart2, CheckCircle, MicOff, AlertCircle, ArrowLeft, Download, Clock, PieChart, Activity, Eye, Edit, Volume2, StopCircle, ChevronRight, X, Lock, Key, Crown, Zap, Brain, Layout, Sparkles, CheckSquare, UserCheck, MessageSquare, Star, Smile, Heart, Info } from 'lucide-react';
+import { BookOpen, Mic, Play, RotateCcw, Award, BarChart2, CheckCircle, MicOff, AlertCircle, ArrowLeft, Download, Clock, PieChart, Activity, Eye, Edit, Volume2, StopCircle, ChevronRight, X, Lock, Key, Crown, Zap, Brain, Layout, Sparkles, CheckSquare, UserCheck, MessageSquare, Star, Smile, Heart, Info, Gamepad2, HelpCircle } from 'lucide-react';
 import { Button, Card } from './components/UI';
-import { LIBRARY, LEVELS, PREMIUM_CODE, DIRECTOR_CODE } from './constants';
-import { DifficultyLevel, IWindow, ReadingResult, WordObject, HeatmapItem } from './types';
+import { LIBRARY, LEVELS, PREMIUM_CODE, DIRECTOR_CODE, FLUENCY_LADDER } from './constants';
+import { DifficultyLevel, IWindow, ReadingResult, WordObject, HeatmapItem, LadderStep } from './types';
 
-// --- Algoritmos Auxiliares Ajustados (Fine Tuning) ---
+// --- Algoritmos Auxiliares Otimizados ---
 
 const getLevenshteinDistance = (a: string, b: string): number => {
   if (a.length === 0) return b.length;
@@ -30,7 +30,7 @@ const getSimilarity = (s1: string, s2: string): number => {
   return (longer.length - getLevenshteinDistance(s1, s2)) / longer.length;
 };
 
-// Mapa fonético para reduções comuns no PT-BR
+// Mapa fonético expandido para PT-BR
 const phoneticMap: { [key: string]: string } = {
   "ta": "esta",
   "tava": "estava",
@@ -38,10 +38,21 @@ const phoneticMap: { [key: string]: string } = {
   "pro": "para o",
   "na": "em a",
   "no": "em o",
+  "num": "em um",
+  "numa": "em uma",
   "ce": "voce",
   "eh": "e",
   "um": "o", 
-  "uma": "a"
+  "uma": "a",
+  "uns": "os",
+  "umas": "as",
+  "to": "estou",
+  "ca": "com a",
+  "co": "com o",
+  "da": "de a",
+  "do": "de o",
+  "dum": "de um",
+  "duma": "de uma"
 };
 
 const cleanWord = (word: string): string => {
@@ -49,14 +60,14 @@ const cleanWord = (word: string): string => {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "") // Remove acentos
-    .replace(/[^a-z0-9]/g, "") // Remove caracteres especiais e hífens
+    .replace(/[^a-z0-9]/g, "") // Remove tudo que não for letra ou número
     .trim();
 };
 
 const getMatchThreshold = (wordLength: number): number => {
-  if (wordLength <= 2) return 0.85; 
+  if (wordLength <= 2) return 0.85; // Leve tolerância para curtas
   if (wordLength <= 4) return 0.75; 
-  return 0.60; 
+  return 0.60; // Alta tolerância para longas (aceita erros fonéticos menores)
 };
 
 const calculateFluencyScore = (
@@ -64,14 +75,15 @@ const calculateFluencyScore = (
   total_palavras_corretas: number,
   tempo_leitura_segundos: number,
   prosodia_nivel: number = 3,
-  acertos_compreensao: number = 5,
-  total_questoes_compreensao: number = 5
+  acertos_compreensao: number,
+  total_questoes_compreensao: number
 ) => {
   const precisao = total_palavras_lidas > 0 ? (total_palavras_corretas / total_palavras_lidas) * 100 : 0;
   const ppm = tempo_leitura_segundos > 0 ? (total_palavras_lidas / tempo_leitura_segundos) * 60 : 0;
   const velocidadeScore = Math.min((ppm / 110) * 100, 100);
   const prosodiaScore = (prosodia_nivel / 4) * 100;
-  const compreensaoScore = total_questoes_compreensao > 0 ? (acertos_compreensao / total_questoes_compreensao) * 100 : 0;
+  const compreensaoScore = total_questoes_compreensao > 0 ? (acertos_compreensao / total_questoes_compreensao) * 100 : 100; // If no quiz, assume 100
+  
   const notaFinal = ((precisao * 0.30) + (velocidadeScore * 0.30) + (prosodiaScore * 0.20) + (compreensaoScore * 0.20));
   
   let classificacao = "";
@@ -85,7 +97,7 @@ const calculateFluencyScore = (
 export default function App() {
   // Views & States
   const [showLanding, setShowLanding] = useState(true);
-  const [view, setView] = useState<'home' | 'text_selection' | 'reading' | 'results' | 'custom_text'>('home');
+  const [view, setView] = useState<'home' | 'text_selection' | 'reading' | 'quiz' | 'results' | 'custom_text' | 'fluency_ladder' | 'ladder_themes' | 'ladder_steps'>('home');
   const [accessLevel, setAccessLevel] = useState<'demo' | 'director' | 'premium'>('demo');
   const [showPremiumInput, setShowPremiumInput] = useState(false);
   const [premiumInput, setPremiumInput] = useState('');
@@ -94,6 +106,11 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [customTextInput, setCustomTextInput] = useState('');
   
+  // Ladder States
+  const [ladderThemeId, setLadderThemeId] = useState<string | null>(null);
+  const [currentLadderStep, setCurrentLadderStep] = useState<LadderStep | null>(null);
+  const [completedSteps, setCompletedSteps] = useState<string[]>([]); // Array of step IDs
+
   // Reading Session
   const [currentTextOriginal, setCurrentTextOriginal] = useState('');
   const [wordsArray, setWordsArray] = useState<WordObject[]>([]); 
@@ -104,6 +121,9 @@ export default function App() {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   
+  // Quiz Session
+  const [quizAnswers, setQuizAnswers] = useState<{ [key: number]: number }>({});
+
   // Refs
   const recognitionRef = useRef<any>(null);
   const timerRef = useRef<number | null>(null);
@@ -116,6 +136,9 @@ export default function App() {
   useEffect(() => {
     const savedLevel = localStorage.getItem('focoler_access_level');
     if (savedLevel === 'premium' || savedLevel === 'director') setAccessLevel(savedLevel);
+    
+    const savedSteps = localStorage.getItem('focoler_completed_steps');
+    if (savedSteps) setCompletedSteps(JSON.parse(savedSteps));
   }, []);
 
   useEffect(() => { wordsRef.current = wordsArray; }, [wordsArray]);
@@ -128,7 +151,7 @@ export default function App() {
     }
   }, [currentWordIndex, isTimerRunning]);
 
-  // --- MOTOR DE RECONHECIMENTO DE VOZ OTIMIZADO (SEARCH & CONFIRM) ---
+  // --- MOTOR DE RECONHECIMENTO DE VOZ OTIMIZADO (TRAVA DUPLA) ---
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const win = window as unknown as IWindow;
@@ -148,76 +171,109 @@ export default function App() {
           if (!latestResult || !latestResult[0]) return;
 
           const transcript = latestResult[0].transcript.toLowerCase();
+          const spokenWordsRaw = transcript.trim().split(/\s+/).filter((w: string) => w.length > 0);
           
-          const spokenWordsRaw = transcript.split(/\s+/).filter((w: string) => w.length > 0);
-          
-          // "Search" Logic: Look through the last N spoken words
+          // Janela maior para garantir contexto
           const PROCESS_WINDOW = 20; 
-          const batch = spokenWordsRaw.slice(-PROCESS_WINDOW).map((w: string) => cleanWord(w));
+          const spokenBatch = spokenWordsRaw.slice(-PROCESS_WINDOW).map((w: string) => cleanWord(w));
           
           let currentIndex = indexRef.current;
           const allWords = wordsRef.current;
-          let changesMade = false;
           let newWordsArray = [...allWords];
+          let updated = false;
 
           const checkMatch = (spoken: string, target: string): boolean => {
             if (!spoken || !target) return false;
-            const threshold = getMatchThreshold(target.length);
-            if (getSimilarity(spoken, target) >= threshold) return true;
             if (phoneticMap[spoken] === target) return true;
-            if (target.includes(spoken) && spoken.length > 3) return true;
+            
+            const threshold = getMatchThreshold(target.length);
+            const similarity = getSimilarity(spoken, target);
+            
+            if (similarity >= threshold) return true;
+            if (target.length > 5 && target.startsWith(spoken) && spoken.length > 3) return true;
             return false;
           };
 
-          // Iterate through spoken batch
-          for (let i = 0; i < batch.length; i++) {
-            const spoken = batch[i];
-            if (currentIndex >= allWords.length) break;
-
-            // LOOKAHEAD SEARCH
-            // Instead of just checking currentIndex, check the next few words
-            // If we find a match ahead, it means the user read it correctly.
-            // We do NOT mark skipped words here (Late Validation).
+          for (let i = 0; i < spokenBatch.length; i++) {
+            const spoken = spokenBatch[i];
             
-            const LOOKAHEAD_LIMIT = 12; // Allow finding words up to 12 steps ahead
-            
-            for (let offset = 0; offset < LOOKAHEAD_LIMIT; offset++) {
-                const targetIdx = currentIndex + offset;
-                if (targetIdx >= allWords.length) break;
+            // 1. Tenta casar com a palavra atual
+            if (currentIndex < allWords.length) {
+                const targetWord = allWords[currentIndex].clean;
                 
-                const targetWord = allWords[targetIdx].clean;
-                
-                // Check single word match
-                let matchFound = checkMatch(spoken, targetWord);
-                
-                // Check combined match (two spoken words = one target)
-                if (!matchFound && i + 1 < batch.length) {
-                    const combined = spoken + batch[i+1];
-                    if (checkMatch(combined, targetWord)) {
-                        matchFound = true;
-                        i++; // Consume next spoken word
+                // Match Simples
+                if (checkMatch(spoken, targetWord)) {
+                    if (newWordsArray[currentIndex].status === 'pending') {
+                        newWordsArray[currentIndex] = { ...newWordsArray[currentIndex], status: 'correct' };
+                        currentIndex++;
+                        updated = true;
+                        continue; 
                     }
                 }
-
-                if (matchFound) {
-                    // Only mark if pending. Don't overwrite existing status.
-                    if (newWordsArray[targetIdx].status === 'pending') {
-                        newWordsArray[targetIdx] = { ...newWordsArray[targetIdx], status: 'correct' };
-                        
-                        // Update current index to be one after the found word
-                        // This moves the "blue cursor" forward
-                        if (targetIdx >= currentIndex) {
-                            currentIndex = targetIdx + 1;
+                
+                // Match Combinado (ex: guarda+chuva)
+                if (i + 1 < spokenBatch.length) {
+                    const combinedSpoken = spoken + spokenBatch[i+1];
+                    if (checkMatch(combinedSpoken, targetWord)) {
+                         if (newWordsArray[currentIndex].status === 'pending') {
+                            newWordsArray[currentIndex] = { ...newWordsArray[currentIndex], status: 'correct' };
+                            currentIndex++;
+                            updated = true;
+                            i++; 
+                            continue;
                         }
-                        changesMade = true;
                     }
-                    // Break inner loop to process next spoken word
-                    break; 
+                }
+            }
+
+            // 2. Tenta "Pular" APENAS se houver SEQUÊNCIA confirmada (TRAVA DE SEGURANÇA)
+            // Não pula mais por uma única palavra solta.
+            const LOOKAHEAD = 8; // Slightly tighter lookahead
+            
+            for (let offset = 1; offset <= LOOKAHEAD; offset++) {
+                const lookIndex = currentIndex + offset;
+                if (lookIndex >= allWords.length - 1) break; 
+                
+                const lookTarget = allWords[lookIndex].clean;
+                
+                // Find next word
+                let nextLookIndex = lookIndex + 1;
+                if (nextLookIndex >= allWords.length) break;
+                
+                const nextLookTarget = allWords[nextLookIndex].clean;
+                
+                // Verifica PAR: Palavra falada (i) bate com Alvo (lookIndex) 
+                // E Palavra falada seguinte (i+1) bate com Alvo seguinte (nextLookIndex)
+                if (i + 1 < spokenBatch.length) {
+                    const nextSpoken = spokenBatch[i+1];
+                    
+                    // Stricter threshold for skipping
+                    const isStrongMatch1 = getSimilarity(spoken, lookTarget) > 0.8; 
+                    const isStrongMatch2 = getSimilarity(nextSpoken, nextLookTarget) > 0.8;
+
+                    if ((checkMatch(spoken, lookTarget) && checkMatch(nextSpoken, nextLookTarget)) && (isStrongMatch1 || isStrongMatch2)) {
+                        // SEQUÊNCIA ENCONTRADA! Pulo autorizado.
+                        
+                        // Marca o par como correto
+                        if (newWordsArray[lookIndex].status === 'pending') {
+                            newWordsArray[lookIndex] = { ...newWordsArray[lookIndex], status: 'correct' };
+                        }
+                        if (newWordsArray[nextLookIndex].status === 'pending') {
+                            newWordsArray[nextLookIndex] = { ...newWordsArray[nextLookIndex], status: 'correct' };
+                        }
+
+                        // Avança índice para DEPOIS do par
+                        currentIndex = nextLookIndex + 1;
+                        
+                        updated = true;
+                        i++; 
+                        break; 
+                    }
                 }
             }
           }
 
-          if (changesMade) {
+          if (updated) {
              setWordsArray(newWordsArray);
              setCurrentWordIndex(currentIndex);
           }
@@ -242,11 +298,6 @@ export default function App() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isTimerRunning]);
 
-  useEffect(() => {
-    // Auto-finish if all words are processed (optional, usually manual stop is better for pacing)
-    // if (wordsArray.length > 0 && currentWordIndex >= wordsArray.length && isTimerRunning) finishReading();
-  }, [currentWordIndex, wordsArray, isTimerRunning]);
-
   // Actions
   const handlePremiumUnlock = () => {
     if (premiumInput === PREMIUM_CODE) {
@@ -267,7 +318,25 @@ export default function App() {
   const startReading = (text: string) => {
     stopTTS();
     setCurrentTextOriginal(text);
-    const words: WordObject[] = text.trim().split(/\s+/).map(w => ({ original: w, clean: cleanWord(w), status: 'pending' }));
+    setQuizAnswers({}); // Reset quiz
+    
+    // Advanced Parsing
+    let words: WordObject[] = [];
+    const lines = text.trim().split('\n'); // Preserve line breaks first
+    
+    lines.forEach((line) => {
+        const lineWords = line.trim().split(/\s+/);
+        lineWords.forEach((w, idx) => {
+            if (w.length === 0) return;
+            words.push({
+                original: w,
+                clean: cleanWord(w),
+                status: 'pending',
+                isLineBreak: idx === lineWords.length - 1 // Last word of line
+            });
+        });
+    });
+
     setWordsArray(words);
     setCurrentWordIndex(0);
     setTimeElapsed(0);
@@ -317,13 +386,36 @@ export default function App() {
     }
   };
 
+  // Called when "Terminei" is clicked in reading view
   const finishReading = () => {
     stopListening();
     
-    // Late Validation: Calculate Skips
+    // Check if Quiz is available
+    if (currentLadderStep?.quiz) {
+        setView('quiz');
+    } else {
+        processResults(5, 5); // Default full comprehension if no quiz
+    }
+  };
+
+  const finishQuiz = () => {
+      if (!currentLadderStep?.quiz) return;
+      
+      let correctAnswers = 0;
+      currentLadderStep.quiz.forEach((q, idx) => {
+          if (quizAnswers[idx] === q.correctOption) {
+              correctAnswers++;
+          }
+      });
+      
+      processResults(correctAnswers, currentLadderStep.quiz.length);
+  };
+
+  const processResults = (quizCorrect: number, quizTotal: number) => {
+    // Validação Tardia: Calcula Pulos
     const finalWords = [...wordsArray];
     
-    // Find the last word marked as correct
+    // Encontra o último índice marcado como correto
     let lastCorrectIndex = -1;
     for (let i = finalWords.length - 1; i >= 0; i--) {
         if (finalWords[i].status === 'correct') {
@@ -332,7 +424,7 @@ export default function App() {
         }
     }
 
-    // Mark everything pending before the last correct word as skipped
+    // Marca tudo que ficou pendente ANTES do último acerto como 'skipped' (erro)
     if (lastCorrectIndex !== -1) {
         for (let i = 0; i < lastCorrectIndex; i++) {
             if (finalWords[i].status === 'pending') {
@@ -344,20 +436,33 @@ export default function App() {
     setWordsArray(finalWords);
 
     const correctWords = finalWords.filter(w => w.status === 'correct').length;
-    // Approximates not used in this simplified client-side logic, treated as correct or ignored
-    const processedWords = finalWords.filter(w => w.status !== 'pending').length;
+    const totalContentWords = finalWords.length;
+    const baseWords = totalContentWords > 0 ? totalContentWords : 1;
     
-    const { nota, classificacao, ppm } = calculateFluencyScore(processedWords > 0 ? processedWords : correctWords, correctWords, timeElapsed);
+    const { nota, classificacao, ppm } = calculateFluencyScore(baseWords, correctWords, timeElapsed, 3, quizCorrect, quizTotal);
     
     let profile = LEVELS.PRE_LEITOR;
     if (ppm >= LEVELS.FLUENTE.minPPM) profile = LEVELS.FLUENTE;
     else if (ppm >= LEVELS.INICIANTE.minPPM) profile = LEVELS.INICIANTE;
     
     const heatmap: HeatmapItem[] = finalWords.map(w => ({ word: w.original, status: w.status }));
+    
     const result: ReadingResult = {
-      ppm, time: timeElapsed, words: correctWords, totalWords: finalWords.length,
+      ppm, time: timeElapsed, words: correctWords, totalWords: totalContentWords,
       profile, date: new Date().toLocaleDateString('pt-BR'), fluencyScore: nota, classification: classificacao, heatmap
     };
+    
+    // Ladder Logic: Mark step as complete if threshold met
+    if (currentLadderStep) {
+        if (nota >= 50) { // Threshold for passing
+            const newCompleted = [...completedSteps, currentLadderStep.id];
+            // Unique
+            const uniqueCompleted = Array.from(new Set(newCompleted));
+            setCompletedSteps(uniqueCompleted);
+            localStorage.setItem('focoler_completed_steps', JSON.stringify(uniqueCompleted));
+        }
+    }
+
     setResultData(result);
     setView('results');
   };
@@ -408,58 +513,6 @@ export default function App() {
             <p className="text-xs text-slate-400 font-medium">Não requer cadastro • Grátis para testar</p>
           </div>
         </div>
-      </div>
-
-      <div className="bg-white py-20 px-6 rounded-t-[3rem] shadow-[0_-20px_60px_-15px_rgba(0,0,0,0.05)] relative z-20">
-        <div className="max-w-6xl mx-auto">
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="bg-sky-50 p-8 rounded-3xl border border-sky-100 hover:shadow-lg transition-all group">
-              <div className="w-14 h-14 bg-sky-200 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-sm">
-                <Mic className="w-7 h-7 text-sky-700" />
-              </div>
-              <h3 className="font-display font-bold text-xl text-slate-800 mb-3">Reconhecimento de Voz</h3>
-              <p className="text-slate-600 leading-relaxed">Nossa tecnologia ouve a criança ler e identifica acertos e dificuldades em tempo real, respeitando o ritmo infantil.</p>
-            </div>
-            <div className="bg-violet-50 p-8 rounded-3xl border border-violet-100 hover:shadow-lg transition-all group">
-              <div className="w-14 h-14 bg-violet-200 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-sm">
-                <Activity className="w-7 h-7 text-violet-700" />
-              </div>
-              <h3 className="font-display font-bold text-xl text-slate-800 mb-3">Feedback Visual</h3>
-              <p className="text-slate-600 leading-relaxed">Mapas de calor coloridos mostram exatamente onde a leitura fluiu e onde precisa de mais atenção.</p>
-            </div>
-            <div className="bg-amber-50 p-8 rounded-3xl border border-amber-100 hover:shadow-lg transition-all group">
-              <div className="w-14 h-14 bg-amber-200 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-sm">
-                <Smile className="w-7 h-7 text-amber-700" />
-              </div>
-              <h3 className="font-display font-bold text-xl text-slate-800 mb-3">100% Lúdico</h3>
-              <p className="text-slate-600 leading-relaxed">Design amigável e histórias envolventes que transformam o momento da avaliação em brincadeira.</p>
-            </div>
-          </div>
-
-          <div className="mt-24">
-            <h2 className="font-display font-bold text-3xl text-center text-slate-800 mb-12">Como Funciona?</h2>
-            <div className="flex flex-col md:flex-row justify-between items-center gap-8 relative">
-              <div className="hidden md:block absolute top-1/2 left-0 w-full h-1 bg-slate-100 -z-10 transform -translate-y-1/2 rounded-full"></div>
-              {[
-                {step: 1, title: "Escolha o Nível", icon: <BarChart2 className="w-5 h-5 text-white"/>, color: "bg-sky-500"},
-                {step: 2, title: "Selecione a História", icon: <BookOpen className="w-5 h-5 text-white"/>, color: "bg-violet-500"},
-                {step: 3, title: "Leia em Voz Alta", icon: <Mic className="w-5 h-5 text-white"/>, color: "bg-fuchsia-500"},
-                {step: 4, title: "Veja o Resultado", icon: <Award className="w-5 h-5 text-white"/>, color: "bg-emerald-500"},
-              ].map((item, i) => (
-                <div key={i} className="flex flex-col items-center text-center bg-white p-4">
-                  <div className={`w-12 h-12 ${item.color} rounded-full flex items-center justify-center shadow-lg shadow-slate-200 mb-4 z-10 border-4 border-white`}>
-                    {item.icon}
-                  </div>
-                  <h4 className="font-bold text-slate-800 mb-1">{item.title}</h4>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <div className="bg-slate-900 py-8 text-center">
-        <p className="text-slate-500 text-sm font-medium">© 2025 FocoLer Educacional • Feito com <Heart className="w-3 h-3 inline text-red-500 fill-red-500"/> para a educação.</p>
       </div>
     </div>
   );
@@ -532,22 +585,21 @@ export default function App() {
         </div>
       )}
 
-      {accessLevel === 'premium' && (
-        <div onClick={() => { setSelectedCategory('Nivelamento'); startReading(LIBRARY['Nivelamento'].texts[selectedLevel][0]); }} 
-          className="group relative p-6 bg-gradient-to-r from-fuchsia-600 to-purple-600 rounded-3xl text-white cursor-pointer shadow-xl shadow-fuchsia-200 transition-all hover:scale-[1.02] overflow-hidden">
-          <div className="absolute right-0 top-0 opacity-10 transform translate-x-4 -translate-y-4 group-hover:rotate-12 transition-transform duration-500">
-              <Award className="w-32 h-32" />
-          </div>
-          <div className="flex items-center gap-5 relative z-10">
-            <div className="p-4 bg-white/20 rounded-2xl backdrop-blur-sm shadow-inner"><Award className="w-8 h-8 text-white" /></div>
-            <div>
-              <h3 className="font-display font-bold text-xl mb-1">Teste de Nivelamento</h3>
-              <p className="text-sm text-fuchsia-100 font-medium">Descubra o nível ideal com uma leitura rápida.</p>
-            </div>
-            <div className="ml-auto bg-white/20 p-2 rounded-full"><ChevronRight className="w-5 h-5 text-white"/></div>
-          </div>
+      {/* Card da Escada da Fluência - Visível para todos */}
+      <div onClick={() => { setView('ladder_themes'); }} 
+        className="group relative p-6 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-3xl text-white cursor-pointer shadow-xl shadow-emerald-200 transition-all hover:scale-[1.02] overflow-hidden mb-4">
+        <div className="absolute right-0 top-0 opacity-10 transform translate-x-4 -translate-y-4 group-hover:rotate-12 transition-transform duration-500">
+            <Gamepad2 className="w-32 h-32" />
         </div>
-      )}
+        <div className="flex items-center gap-5 relative z-10">
+          <div className="p-4 bg-white/20 rounded-2xl backdrop-blur-sm shadow-inner"><Zap className="w-8 h-8 text-white" /></div>
+          <div>
+            <h3 className="font-display font-bold text-xl mb-1">Escada da Fluência</h3>
+            <p className="text-sm text-emerald-100 font-medium">Jogue e desbloqueie níveis de leitura!</p>
+          </div>
+          <div className="ml-auto bg-white/20 p-2 rounded-full"><ChevronRight className="w-5 h-5 text-white"/></div>
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 gap-4 pb-20">
         {Object.entries(LIBRARY)
@@ -579,13 +631,318 @@ export default function App() {
     </div>
   );
 
+  const renderLadderThemes = () => (
+    <div className="space-y-6 animate-fade-in pt-4 w-full px-2">
+      <div className="flex items-center gap-4 mb-4">
+        <button onClick={() => setView('home')} className="p-3 bg-white hover:bg-slate-50 rounded-2xl text-slate-500 shadow-sm border border-slate-100 transition-colors"><ArrowLeft className="w-6 h-6" /></button>
+        <div>
+          <h2 className="font-display font-bold text-slate-800 text-xl">Escada da Fluência</h2>
+          <p className="text-xs text-slate-400 font-bold uppercase tracking-wide">Escolha um Tema</p>
+        </div>
+      </div>
+      <div className="grid gap-4 pb-20">
+        {Object.values(FLUENCY_LADDER).map((theme) => {
+            const isLocked = theme.premium && accessLevel === 'demo';
+            return (
+                <div key={theme.id} 
+                    onClick={() => { if (!isLocked) { setLadderThemeId(theme.id); setView('ladder_steps'); } }}
+                    className={`relative p-6 rounded-3xl border-2 transition-all cursor-pointer overflow-hidden ${isLocked ? 'bg-slate-50 border-slate-100 opacity-80' : `bg-white ${theme.bg.replace('bg-', 'border-')} hover:shadow-lg`}`}
+                >
+                    {isLocked && <div className="absolute top-4 right-4 bg-slate-200 p-2 rounded-full"><Lock className="w-4 h-4 text-slate-500" /></div>}
+                    <div className={`flex items-center gap-4 ${theme.color}`}>
+                        <div className={`w-12 h-12 rounded-2xl ${theme.bg} flex items-center justify-center`}>{theme.icon}</div>
+                        <div>
+                            <h3 className="font-display font-bold text-lg text-slate-800">{theme.title}</h3>
+                            <p className="text-sm font-medium opacity-70">{theme.steps.length} níveis</p>
+                        </div>
+                    </div>
+                </div>
+            )
+        })}
+      </div>
+      {accessLevel === 'demo' && (
+          <div className="bg-amber-50 text-amber-800 p-4 rounded-2xl text-sm flex items-start gap-3 border border-amber-100">
+            <Lock className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <span className="font-medium leading-tight">Temas Premium bloqueados. <span className="underline cursor-pointer font-bold hover:text-amber-600" onClick={() => { setView('home'); setShowPremiumInput(true); }}>Desbloquear tudo</span>.</span>
+          </div>
+        )}
+    </div>
+  );
+
+  const renderLadderSteps = () => {
+    if (!ladderThemeId || !FLUENCY_LADDER[ladderThemeId]) return null;
+    const theme = FLUENCY_LADDER[ladderThemeId];
+
+    return (
+        <div className="space-y-6 animate-fade-in pt-4 w-full px-2">
+            <div className="flex items-center gap-4 mb-4">
+                <button onClick={() => setView('ladder_themes')} className="p-3 bg-white hover:bg-slate-50 rounded-2xl text-slate-500 shadow-sm border border-slate-100 transition-colors"><ArrowLeft className="w-6 h-6" /></button>
+                <div>
+                <h2 className="font-display font-bold text-slate-800 text-xl">{theme.title}</h2>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-wide">Sua jornada</p>
+                </div>
+            </div>
+            
+            <div className="space-y-4 relative pb-20">
+                {/* Linha conectora visual */}
+                <div className="absolute left-8 top-8 bottom-8 w-1 bg-slate-100 -z-10 rounded-full"></div>
+
+                {theme.steps.map((step, index) => {
+                    const isCompleted = completedSteps.includes(step.id);
+                    // O primeiro passo é sempre liberado. Os próximos dependem do anterior estar completo.
+                    const isUnlocked = index === 0 || completedSteps.includes(theme.steps[index - 1].id);
+                    
+                    return (
+                        <div key={step.id} 
+                            onClick={() => { if (isUnlocked) { setCurrentLadderStep(step); setSelectedCategory("Escada da Fluência"); startReading(step.content); } }}
+                            className={`flex gap-4 items-center p-4 rounded-3xl border-2 transition-all ${isUnlocked ? 'bg-white border-slate-100 cursor-pointer hover:border-emerald-200 hover:shadow-md' : 'bg-slate-50 border-slate-100 opacity-60 cursor-not-allowed'}`}
+                        >
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 z-10 border-4 border-white ${isCompleted ? 'bg-emerald-500 text-white' : (isUnlocked ? 'bg-white border-emerald-500 text-emerald-600' : 'bg-slate-200 text-slate-400')}`}>
+                                {isCompleted ? <CheckCircle className="w-5 h-5"/> : index + 1}
+                            </div>
+                            <div className="flex-1">
+                                <h4 className={`font-bold ${isUnlocked ? 'text-slate-800' : 'text-slate-400'}`}>{step.title}</h4>
+                                <p className="text-xs text-slate-500">{step.description}</p>
+                            </div>
+                            {!isUnlocked && <Lock className="w-4 h-4 text-slate-300" />}
+                            {isUnlocked && !isCompleted && <Play className="w-4 h-4 text-emerald-500 fill-emerald-500" />}
+                        </div>
+                    )
+                })}
+            </div>
+        </div>
+    )
+  };
+
+  const renderTextSelection = () => {
+    if (!selectedCategory || !LIBRARY[selectedCategory]) return null;
+    const allTexts = LIBRARY[selectedCategory].texts[selectedLevel];
+    
+    // Access Level Logic
+    let textsToDisplay = allTexts;
+    if (accessLevel === 'demo') textsToDisplay = allTexts.slice(0, 1);
+    else if (accessLevel === 'director') textsToDisplay = allTexts.slice(0, 5);
+    // Premium sees all
+
+    return (
+      <div className="space-y-6 animate-fade-in pt-4 w-full px-2">
+        <div className="flex items-center gap-4 mb-4">
+          <button onClick={() => setView('home')} className="p-3 bg-white hover:bg-slate-50 rounded-2xl text-slate-500 shadow-sm border border-slate-100 transition-colors"><ArrowLeft className="w-6 h-6" /></button>
+          <div>
+            <h2 className="font-display font-bold text-slate-800 text-xl">{selectedCategory}</h2>
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-wide">Nível {selectedLevel}</p>
+          </div>
+        </div>
+        {accessLevel === 'demo' && (
+          <div className="bg-amber-50 text-amber-800 p-4 rounded-2xl text-sm flex items-start gap-3 border border-amber-100">
+            <Lock className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <span className="font-medium leading-tight">Modo Demonstração: Apenas 1 texto liberado. <span className="underline cursor-pointer font-bold hover:text-amber-600" onClick={() => { setView('home'); setShowPremiumInput(true); }}>Desbloquear</span> para mais.</span>
+          </div>
+        )}
+        <div className="grid gap-4 pb-24">
+          {textsToDisplay.map((text, index) => (
+            <div key={index} onClick={() => { setCurrentLadderStep(null); startReading(text); }} className="group bg-white p-6 rounded-3xl border border-slate-100 cursor-pointer hover:border-violet-200 hover:shadow-lg transition-all active:scale-[0.98] relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-16 h-16 bg-slate-50 rounded-bl-full -mr-8 -mt-8 group-hover:bg-violet-50 transition-colors"></div>
+              <div className="flex gap-4">
+                <div className="w-10 h-10 rounded-full bg-slate-50 text-slate-400 font-bold flex items-center justify-center flex-shrink-0 group-hover:bg-violet-100 group-hover:text-violet-600 transition-colors">
+                  {index + 1}
+                </div>
+                <p className="text-slate-600 text-base line-clamp-3 leading-relaxed font-medium">{text}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderQuiz = () => {
+      if (!currentLadderStep?.quiz) return null;
+      const quiz = currentLadderStep.quiz;
+      
+      return (
+          <div className="h-full flex flex-col pt-4 animate-fade-in w-full px-2">
+              <div className="flex justify-between items-center mb-6">
+                  <h2 className="font-display font-bold text-2xl text-slate-800">Quiz de Compreensão</h2>
+                  <div className="px-4 py-2 bg-violet-100 text-violet-700 rounded-full font-bold text-sm">
+                      {Object.keys(quizAnswers).length} / {quiz.length}
+                  </div>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto space-y-6 pb-20">
+                  {quiz.map((q, idx) => (
+                      <div key={q.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                          <h3 className="font-bold text-lg text-slate-700 mb-4">{idx + 1}. {q.question}</h3>
+                          <div className="space-y-2">
+                              {q.options.map((opt, optIdx) => (
+                                  <button
+                                      key={optIdx}
+                                      onClick={() => setQuizAnswers(prev => ({...prev, [idx]: optIdx}))}
+                                      className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+                                          quizAnswers[idx] === optIdx 
+                                          ? 'bg-violet-600 border-violet-600 text-white shadow-md' 
+                                          : 'bg-slate-50 border-slate-100 text-slate-600 hover:border-violet-200'
+                                      }`}
+                                  >
+                                      {opt}
+                                  </button>
+                              ))}
+                          </div>
+                      </div>
+                  ))}
+              </div>
+              
+              <div className="fixed bottom-6 left-0 right-0 px-6 max-w-lg mx-auto">
+                  <Button 
+                      disabled={Object.keys(quizAnswers).length < quiz.length}
+                      onClick={finishQuiz}
+                      variant="primary"
+                      className="w-full py-5 text-xl rounded-2xl shadow-xl"
+                  >
+                      Ver Resultado
+                  </Button>
+              </div>
+          </div>
+      )
+  };
+
+  const renderReading = () => {
+    const isSimulado = selectedCategory === "Simulado";
+    const isOverTime = isSimulado && timeElapsed > 63;
+    const isLadder = !!currentLadderStep;
+    const ladderType = currentLadderStep?.type || 'text';
+    
+    return (
+      <div className="h-full flex flex-col pt-4 animate-fade-in w-full px-2">
+        <div className="flex justify-between items-center mb-6 sticky top-0 z-20 py-2 bg-gradient-to-b from-sky-50 to-sky-50/0">
+          <button onClick={() => { stopListening(); setView(isLadder ? 'ladder_steps' : (selectedCategory === "Texto Personalizado" ? 'home' : 'text_selection')); }} className="p-3 bg-white hover:bg-slate-50 rounded-2xl text-slate-500 shadow-sm border border-slate-100"><ArrowLeft className="w-6 h-6" /></button>
+          
+          <div className={`px-5 py-2 rounded-full font-mono font-bold text-xl flex items-center gap-3 shadow-sm border ${isOverTime ? 'bg-red-50 text-red-600 border-red-100 animate-pulse' : 'bg-white text-slate-600 border-slate-100'}`}>
+            <Clock className={`w-5 h-5 ${isOverTime ? 'text-red-500' : 'text-slate-400'}`} /> 
+            {Math.floor(timeElapsed / 60)}:{(timeElapsed % 60).toString().padStart(2, '0')}
+          </div>
+          
+          <div className="w-12 h-12 flex items-center justify-center bg-white rounded-2xl shadow-sm border border-slate-100">
+            {isListening ? <Mic className="w-6 h-6 text-red-500 animate-pulse" /> : <MicOff className="w-6 h-6 text-slate-300" />}
+          </div>
+        </div>
+
+        <div className="flex-1 bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/60 border border-slate-100 p-6 md:p-10 mb-6 overflow-y-auto relative scroll-smooth">
+          {/* Container específico para pirâmide */}
+          {ladderType === 'pyramid' ? (
+              <div className="w-full flex flex-col items-center justify-center min-h-[300px] border-2 border-dashed border-slate-300 rounded-3xl p-8 bg-slate-50/50">
+                  <div className="flex flex-col items-center space-y-4 text-center">
+                      {/* Precisamos renderizar linha por linha */}
+                      {/* O array wordsArray é plano. Precisamos reconstruir as linhas visualmente */}
+                      {(() => {
+                          const lines = [];
+                          let currentLine = [];
+                          wordsArray.forEach((w, idx) => {
+                              currentLine.push({...w, idx}); // Keep original index
+                              if (w.isLineBreak) {
+                                  lines.push(currentLine);
+                                  currentLine = [];
+                              }
+                          });
+                          if (currentLine.length > 0) lines.push(currentLine); // Should not happen if well formatted
+
+                          return lines.map((line, lineIdx) => (
+                              <div key={lineIdx} className="text-2xl md:text-3xl font-bold text-slate-700 leading-relaxed">
+                                  {line.map((item) => {
+                                      let colorClass = "text-slate-400";
+                                      if (item.idx === currentWordIndex) colorClass = "text-white bg-violet-600 px-1 rounded shadow-sm";
+                                      else if (item.status === 'correct') colorClass = "text-emerald-600";
+                                      
+                                      return (
+                                          <span key={item.idx} className={`mx-1 transition-all ${colorClass}`}>
+                                              {item.original}
+                                          </span>
+                                      )
+                                  })}
+                              </div>
+                          ));
+                      })()}
+                  </div>
+              </div>
+          ) : (
+              // Padrão para Texto e Lista
+              <>
+                {!isTimerRunning && timeElapsed === 0 && (
+                    <div className="absolute inset-0 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center z-10 text-center p-8 rounded-[2.5rem]">
+                    <div className="w-20 h-20 bg-violet-100 rounded-full flex items-center justify-center mb-6 animate-pulse-soft">
+                        {isLadder ? <Gamepad2 className="w-10 h-10 text-violet-600"/> : <BookOpen className="w-10 h-10 text-violet-600" />}
+                    </div>
+                    <h3 className="font-display font-bold text-2xl text-slate-800 mb-2">Hora da Leitura!</h3>
+                    <p className="text-slate-500 mb-8 max-w-xs leading-relaxed">Leia o texto em voz alta com calma e clareza. Vamos começar?</p>
+                    
+                    <div className="flex flex-col gap-4 w-full max-w-xs">
+                        <Button onClick={toggleTTS} variant="secondary" className="w-full py-4 rounded-2xl border-violet-100 text-violet-600 hover:bg-violet-50">{isSpeaking ? 'Parar Áudio' : 'Ouvir Exemplo'}</Button>
+                        <Button onClick={startListening} variant="primary" className="w-full py-4 rounded-2xl bg-violet-600 hover:bg-violet-700 shadow-violet-200 text-lg">Começar Agora</Button>
+                    </div>
+                    </div>
+                )}
+                
+                <div className={`
+                        ${ladderType === 'list' ? 'flex flex-wrap gap-3 justify-center' : ''}
+                        text-2xl md:text-4xl leading-[2] md:leading-[2] font-medium text-slate-300 transition-all duration-500 ${!isTimerRunning && timeElapsed === 0 ? 'blur-sm opacity-50' : 'opacity-100'}
+                    `}>
+                    {wordsArray.map((item, index) => {
+                    let statusClass = "mr-2.5 px-1 py-0.5 rounded-lg inline-block transition-all duration-300";
+                    const isCurrent = index === currentWordIndex;
+                    
+                    if (ladderType === 'list') {
+                        statusClass = "px-4 py-2 rounded-xl border-2 transition-all duration-300 inline-block m-1";
+                    }
+
+                    // Highlights
+                    if (isCurrent) {
+                        statusClass += " bg-violet-600 text-white font-bold transform scale-110 shadow-lg shadow-violet-200 z-10 relative";
+                        if (ladderType === 'list') statusClass += " border-violet-600";
+                    }
+                    else if (item.status === 'correct') {
+                        statusClass += " bg-emerald-100 text-emerald-800";
+                        if (ladderType === 'list') statusClass += " border-emerald-200";
+                    }
+                    else if (item.status === 'skipped') {
+                        statusClass += " text-slate-700"; 
+                    }
+                    else if (item.status === 'pending') {
+                        statusClass += " text-slate-700";
+                        if (ladderType === 'list') statusClass += " border-slate-100 bg-slate-50";
+                    }
+
+                    return (
+                        <span 
+                        key={index} 
+                        ref={isCurrent ? activeWordRef : null}
+                        className={statusClass}
+                        >
+                        {item.original}
+                        </span>
+                    );
+                    })}
+                </div>
+              </>
+          )}
+        </div>
+        {isTimerRunning && (
+          <Button onClick={finishReading} variant="success" className="w-full py-5 text-xl rounded-2xl bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200 mb-6">
+            <CheckCircle className="w-6 h-6" /> {currentLadderStep?.quiz ? 'Ir para o Quiz' : 'Terminei a Leitura'}
+          </Button>
+        )}
+      </div>
+    );
+  };
+
   const renderResults = () => {
     if (!resultData) return null;
     const isSimulado = selectedCategory === "Simulado";
+    const isLadder = !!currentLadderStep;
     
-    const totalProcessed = wordsArray.filter(w => w.status !== 'pending').length || 1;
+    // Total processed excludes cues
+    const totalContentWords = wordsArray.length || 1;
     const correctCount = wordsArray.filter(w => w.status === 'correct').length;
-    const correctPct = Math.round((correctCount / totalProcessed) * 100);
+    const correctPct = Math.round((correctCount / totalContentWords) * 100);
     const radius = 40;
     const circumference = 2 * Math.PI * radius;
     const offset = circumference - (correctPct / 100) * circumference;
@@ -661,6 +1018,15 @@ export default function App() {
             <p className="text-slate-600 text-sm leading-relaxed">{feedback}</p>
         </div>
 
+        {isLadder && resultData.fluencyScore >= 50 && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 text-center shadow-sm">
+                <h3 className="font-display font-bold text-emerald-700 mb-1 flex items-center justify-center gap-2">
+                    <CheckCircle className="w-5 h-5" /> Nível Concluído!
+                </h3>
+                <p className="text-emerald-600 text-sm">Você desbloqueou o próximo passo da escada.</p>
+            </div>
+        )}
+
         {isSimulado && (
           <div className={`p-4 rounded-2xl text-left border-l-4 ${resultData.ppm >= 57 ? 'bg-emerald-50 border-emerald-400' : 'bg-orange-50 border-orange-400'}`}>
              <div className="flex items-center justify-between mb-1">
@@ -687,7 +1053,7 @@ export default function App() {
         </div>
 
         <div className="flex gap-4 pt-4">
-          <Button onClick={() => setView('home')} variant="secondary" className="flex-1 py-4 rounded-2xl border-slate-200 text-slate-600">Voltar</Button>
+          <Button onClick={() => setView(isLadder ? 'ladder_steps' : 'home')} variant="secondary" className="flex-1 py-4 rounded-2xl border-slate-200 text-slate-600">Voltar</Button>
           <Button onClick={() => startReading(currentTextOriginal)} variant="primary" className="flex-1 py-4 rounded-2xl bg-violet-600 hover:bg-violet-700 shadow-violet-200">Ler Novamente</Button>
         </div>
       </div>
@@ -708,126 +1074,9 @@ export default function App() {
           onChange={(e) => setCustomTextInput(e.target.value)} 
         />
       </div>
-      <Button disabled={!customTextInput.trim()} onClick={() => { setSelectedCategory("Texto Personalizado"); startReading(customTextInput); }} className="w-full py-5 text-lg rounded-2xl bg-violet-600 hover:bg-violet-700 shadow-violet-200">Iniciar Leitura</Button>
+      <Button disabled={!customTextInput.trim()} onClick={() => { setSelectedCategory("Texto Personalizado"); setCurrentLadderStep(null); startReading(customTextInput); }} className="w-full py-5 text-lg rounded-2xl bg-violet-600 hover:bg-violet-700 shadow-violet-200">Iniciar Leitura</Button>
     </div>
   );
-
-  const renderTextSelection = () => {
-    if (!selectedCategory || !LIBRARY[selectedCategory]) return null;
-    const allTexts = LIBRARY[selectedCategory].texts[selectedLevel];
-    
-    // Access Level Logic
-    let textsToDisplay = allTexts;
-    if (accessLevel === 'demo') textsToDisplay = allTexts.slice(0, 1);
-    else if (accessLevel === 'director') textsToDisplay = allTexts.slice(0, 5);
-    // Premium sees all
-
-    return (
-      <div className="space-y-6 animate-fade-in pt-4 w-full px-2">
-        <div className="flex items-center gap-4 mb-4">
-          <button onClick={() => setView('home')} className="p-3 bg-white hover:bg-slate-50 rounded-2xl text-slate-500 shadow-sm border border-slate-100 transition-colors"><ArrowLeft className="w-6 h-6" /></button>
-          <div>
-            <h2 className="font-display font-bold text-slate-800 text-xl">{selectedCategory}</h2>
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-wide">Nível {selectedLevel}</p>
-          </div>
-        </div>
-        {accessLevel === 'demo' && (
-          <div className="bg-amber-50 text-amber-800 p-4 rounded-2xl text-sm flex items-start gap-3 border border-amber-100">
-            <Lock className="w-5 h-5 flex-shrink-0 mt-0.5" />
-            <span className="font-medium leading-tight">Modo Demonstração: Apenas 1 texto liberado. <span className="underline cursor-pointer font-bold hover:text-amber-600" onClick={() => { setView('home'); setShowPremiumInput(true); }}>Desbloquear</span> para mais.</span>
-          </div>
-        )}
-        <div className="grid gap-4 pb-24">
-          {textsToDisplay.map((text, index) => (
-            <div key={index} onClick={() => startReading(text)} className="group bg-white p-6 rounded-3xl border border-slate-100 cursor-pointer hover:border-violet-200 hover:shadow-lg transition-all active:scale-[0.98] relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-16 h-16 bg-slate-50 rounded-bl-full -mr-8 -mt-8 group-hover:bg-violet-50 transition-colors"></div>
-              <div className="flex gap-4">
-                <div className="w-10 h-10 rounded-full bg-slate-50 text-slate-400 font-bold flex items-center justify-center flex-shrink-0 group-hover:bg-violet-100 group-hover:text-violet-600 transition-colors">
-                  {index + 1}
-                </div>
-                <p className="text-slate-600 text-base line-clamp-3 leading-relaxed font-medium">{text}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  const renderReading = () => {
-    const isSimulado = selectedCategory === "Simulado";
-    const isOverTime = isSimulado && timeElapsed > 63;
-    
-    return (
-      <div className="h-full flex flex-col pt-4 animate-fade-in w-full px-2">
-        <div className="flex justify-between items-center mb-6 sticky top-0 z-20 py-2 bg-gradient-to-b from-sky-50 to-sky-50/0">
-          <button onClick={() => { stopListening(); setView('home'); }} className="p-3 bg-white hover:bg-slate-50 rounded-2xl text-slate-500 shadow-sm border border-slate-100"><ArrowLeft className="w-6 h-6" /></button>
-          
-          <div className={`px-5 py-2 rounded-full font-mono font-bold text-xl flex items-center gap-3 shadow-sm border ${isOverTime ? 'bg-red-50 text-red-600 border-red-100 animate-pulse' : 'bg-white text-slate-600 border-slate-100'}`}>
-            <Clock className={`w-5 h-5 ${isOverTime ? 'text-red-500' : 'text-slate-400'}`} /> 
-            {Math.floor(timeElapsed / 60)}:{(timeElapsed % 60).toString().padStart(2, '0')}
-          </div>
-          
-          <div className="w-12 h-12 flex items-center justify-center bg-white rounded-2xl shadow-sm border border-slate-100">
-            {isListening ? <Mic className="w-6 h-6 text-red-500 animate-pulse" /> : <MicOff className="w-6 h-6 text-slate-300" />}
-          </div>
-        </div>
-
-        <div className="flex-1 bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/60 border border-slate-100 p-6 md:p-10 mb-6 overflow-y-auto relative scroll-smooth">
-          {!isTimerRunning && timeElapsed === 0 && (
-            <div className="absolute inset-0 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center z-10 text-center p-8 rounded-[2.5rem]">
-              <div className="w-20 h-20 bg-violet-100 rounded-full flex items-center justify-center mb-6 animate-pulse-soft">
-                <BookOpen className="w-10 h-10 text-violet-600" />
-              </div>
-              <h3 className="font-display font-bold text-2xl text-slate-800 mb-2">Hora da Leitura!</h3>
-              <p className="text-slate-500 mb-8 max-w-xs leading-relaxed">Leia o texto em voz alta com calma e clareza. Vamos começar?</p>
-              
-              <div className="flex flex-col gap-4 w-full max-w-xs">
-                <Button onClick={toggleTTS} variant="secondary" className="w-full py-4 rounded-2xl border-violet-100 text-violet-600 hover:bg-violet-50">{isSpeaking ? 'Parar Áudio' : 'Ouvir Exemplo'}</Button>
-                <Button onClick={startListening} variant="primary" className="w-full py-4 rounded-2xl bg-violet-600 hover:bg-violet-700 shadow-violet-200 text-lg">Começar Agora</Button>
-              </div>
-            </div>
-          )}
-          
-          <div className={`text-2xl md:text-4xl leading-[2] md:leading-[2] font-medium text-slate-300 transition-all duration-500 ${!isTimerRunning && timeElapsed === 0 ? 'blur-sm opacity-50' : 'opacity-100'}`}>
-            {wordsArray.map((item, index) => {
-              let statusClass = "mr-2.5 px-1 py-0.5 rounded-lg inline-block transition-all duration-300";
-              const isCurrent = index === currentWordIndex;
-              
-              if (isCurrent) {
-                statusClass += " bg-violet-600 text-white font-bold transform scale-110 shadow-lg shadow-violet-200 z-10 relative";
-              }
-              else if (item.status === 'correct') {
-                statusClass += " bg-emerald-100 text-emerald-800";
-              }
-              else if (item.status === 'skipped') {
-                // Pending logic hides skips until the end
-                statusClass += " text-slate-700"; 
-              }
-              else if (item.status === 'pending') {
-                statusClass += " text-slate-700";
-              }
-
-              return (
-                <span 
-                  key={index} 
-                  ref={isCurrent ? activeWordRef : null}
-                  className={statusClass}
-                >
-                  {item.original}
-                </span>
-              );
-            })}
-          </div>
-        </div>
-        {isTimerRunning && (
-          <Button onClick={finishReading} variant="success" className="w-full py-5 text-xl rounded-2xl bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200 mb-6">
-            <CheckCircle className="w-6 h-6" /> Terminei a Leitura
-          </Button>
-        )}
-      </div>
-    );
-  };
 
   if (showLanding) return renderLandingPage();
 
@@ -838,7 +1087,11 @@ export default function App() {
           {view === 'home' && renderHome()}
           {view === 'text_selection' && renderTextSelection()}
           {view === 'custom_text' && renderCustomText()}
+          {view === 'fluency_ladder' && renderLadderThemes()} 
+          {view === 'ladder_themes' && renderLadderThemes()}
+          {view === 'ladder_steps' && renderLadderSteps()}
           {view === 'reading' && renderReading()}
+          {view === 'quiz' && renderQuiz()}
           {view === 'results' && renderResults()}
         </div>
       </div>

@@ -1,10 +1,121 @@
 import React from 'react';
-import { Cat, Rocket, Sparkles, Trophy, Monitor, FileText, BarChart } from 'lucide-react';
-import { LibraryData, ReadingProfile } from './types';
+import { Cat, Rocket, Sparkles, Trophy, Monitor, FileText, BarChart, Heart, Users, Gamepad2 } from 'lucide-react';
+import { LibraryData, ReadingProfile, LadderData } from './types';
 
 export const ACCESS_CODE = "focoler2025";
 export const PREMIUM_CODE = "focolerpro2025";
 export const DIRECTOR_CODE = "carlosdiretoria";
+
+export const FLUENCY_LADDER: LadderData = {
+  "animais": {
+    id: "animais",
+    title: "Animais",
+    icon: <Cat className="w-6 h-6" />,
+    color: "text-emerald-700",
+    bg: "bg-emerald-100",
+    premium: false, // Free/Demo
+    steps: [
+      {
+        id: "a1",
+        title: "Nível 1: Palavras & Pseudopalavras",
+        type: "list",
+        description: "Treino de fonemas /t/ e /d/",
+        content: "tatu dia tudo dedo tia data tela dote tolo teto tida dota tedu dito tuca"
+      },
+      {
+        id: "a2",
+        title: "Nível 2: Pirâmide de Fluência",
+        type: "pyramid",
+        description: "Leitura cumulativa",
+        content: "O\nO tatu\nO tatu cava\nO tatu cava a\nO tatu cava a toca"
+      },
+      {
+        id: "a3",
+        title: "Nível 3: Pequena História",
+        type: "text",
+        description: "Texto com diálogo e compreensão",
+        content: "O tatu Tico viu o Dudu. Dudu é um pato. Tico disse: Olá Dudu! Dudu falou: Olá Tico! O dia está lindo. Tico e Dudu nadaram no lago.",
+        quiz: [
+          { id: "q1", question: "Quem é Tico?", options: ["Um pato", "Um tatu", "Um sapo"], correctOption: 1 },
+          { id: "q2", question: "Quem Tico encontrou?", options: ["A fada", "O Dudu", "O Beto"], correctOption: 1 },
+          { id: "q3", question: "O que eles fizeram?", options: ["Voaram", "Correram", "Nadaram no lago"], correctOption: 2 }
+        ]
+      }
+    ]
+  },
+  "futebol": {
+    id: "futebol",
+    title: "Futebol",
+    icon: <Trophy className="w-6 h-6" />,
+    color: "text-orange-700",
+    bg: "bg-orange-100",
+    premium: true,
+    steps: [
+      {
+        id: "f1",
+        title: "Nível 1: Palavras & Pseudopalavras",
+        type: "list",
+        description: "Treino de fonemas /b/ e /p/",
+        content: "bola pato bico pia bule pelo boca pote bata pulo bapa pepu bopi pupa bapo"
+      },
+      {
+        id: "f2",
+        title: "Nível 2: Pirâmide de Fluência",
+        type: "pyramid",
+        description: "Leitura cumulativa",
+        content: "A\nA bola\nA bola bate\nA bola bate na\nA bola bate na trave"
+      },
+      {
+        id: "f3",
+        title: "Nível 3: Pequena História",
+        type: "text",
+        description: "Texto com diálogo e compreensão",
+        content: "Beto joga bola. Ele chuta forte. O goleiro Pepe pula. Pepe pega a bola. Beto diz: Boa Pepe! Pepe diz: Valeu Beto! O jogo foi muito bom.",
+        quiz: [
+          { id: "q1", question: "O que Beto joga?", options: ["Vôlei", "Bola", "Peteca"], correctOption: 1 },
+          { id: "q2", question: "Quem é o goleiro?", options: ["Pepe", "Beto", "Tico"], correctOption: 0 },
+          { id: "q3", question: "Como foi o jogo?", options: ["Ruim", "Chato", "Muito bom"], correctOption: 2 }
+        ]
+      }
+    ]
+  },
+  "amizade": {
+    id: "amizade",
+    title: "Amizade",
+    icon: <Heart className="w-6 h-6" />,
+    color: "text-pink-700",
+    bg: "bg-pink-100",
+    premium: true,
+    steps: [
+      {
+        id: "z1",
+        title: "Nível 1: Palavras & Pseudopalavras",
+        type: "list",
+        description: "Treino de fonemas /v/ e /f/",
+        content: "fada vida foto voto fita vela faca vale figo vila fuvu vefa fofi vavi fevo"
+      },
+      {
+        id: "z2",
+        title: "Nível 2: Pirâmide de Fluência",
+        type: "pyramid",
+        description: "Leitura cumulativa",
+        content: "A\nA fada\nA fada voa\nA fada voa na\nA fada voa na vila"
+      },
+      {
+        id: "z3",
+        title: "Nível 3: Pequena História",
+        type: "text",
+        description: "Texto com diálogo e compreensão",
+        content: "A fada Fifi viu a Vivi. Vivi estava na vila. Fifi deu uma flor para Vivi. Vivi disse: Obrigada Fifi! Fifi sorriu feliz. Elas são boas amigas.",
+        quiz: [
+          { id: "q1", question: "O que Fifi é?", options: ["Uma menina", "Uma fada", "Uma boneca"], correctOption: 1 },
+          { id: "q2", question: "O que Fifi deu para Vivi?", options: ["Uma bola", "Uma flor", "Um doce"], correctOption: 1 },
+          { id: "q3", question: "Como elas são?", options: ["Boas amigas", "Inimigas", "Primas"], correctOption: 0 }
+        ]
+      }
+    ]
+  }
+};
 
 export const LIBRARY: LibraryData = {
   "Nivelamento": {

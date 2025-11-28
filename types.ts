@@ -68,10 +68,46 @@ export interface WordObject {
   original: string;
   clean: string;
   status: WordStatus;
+  isCue?: boolean;       // For Theater names/emotions (Legacy/Optional)
+  isLineBreak?: boolean; // For Pyramid structure
 }
 
 // Web Speech API Types
 export interface IWindow extends Window {
   SpeechRecognition: any;
   webkitSpeechRecognition: any;
+}
+
+// --- Fluency Ladder Types ---
+
+export type LadderStepType = 'list' | 'pyramid' | 'text' | 'theater';
+
+export interface QuizQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  correctOption: number; // 0-indexed
+}
+
+export interface LadderStep {
+  id: string;
+  title: string;
+  type: LadderStepType;
+  content: string;
+  description: string;
+  quiz?: QuizQuestion[];
+}
+
+export interface LadderTheme {
+  id: string;
+  title: string;
+  icon: ReactNode;
+  color: string;
+  bg: string;
+  steps: LadderStep[];
+  premium: boolean;
+}
+
+export interface LadderData {
+  [key: string]: LadderTheme;
 }
